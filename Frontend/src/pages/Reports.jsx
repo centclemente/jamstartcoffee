@@ -5,8 +5,7 @@ import { jsPDF } from 'jspdf';
 import api from '../api/axios';
 
 const reports = [
-  { key: 'sales_trend', title: 'Sales trend', description: 'Review monthly revenue and units sold across a selected period.', icon: LineChart, accent: 'bg-emerald-100 text-emerald-800' },
-  { key: 'forecasting', title: 'Forecasting report', description: 'Export projected sales from the latest six months of activity.', icon: BarChart3, accent: 'bg-lime-100 text-lime-800' },
+  { key: 'sales_trend', title: 'Report', description: 'Review sales, demand, performance, insights, and the latest six-month forecast in one report.', icon: LineChart, accent: 'bg-emerald-100 text-emerald-800' },
 ];
 const peso = (value) => `PHP ${Number(value || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })}`;
 const num = (value) => Number(value || 0).toLocaleString('en-PH', { maximumFractionDigits: 0 });

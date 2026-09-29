@@ -132,7 +132,7 @@ export async function getKpiSummary(req, res) {
         date_trunc('month', date) AS month,
         SUM("totalSales")::float AS revenue
       FROM "Sale"
-      WHERE date >= ${previousMonthStart} AND date <= ${to}
+      WHERE date >= ${previousMonthStart} AND date < ${new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() + 1, 1))}
       GROUP BY date_trunc('month', date)
       ORDER BY month ASC
     `;

@@ -229,7 +229,8 @@ export default function Dashboard() {
   const [salesTrendData, setSalesTrendData] = useState([]);
   const [demandTrendData, setDemandTrendData] = useState([]);
   const [topItemsData, setTopItemsData] = useState([]);
-  const [kpiData, setKpiData] = useState(null);
+  const [generalKpiData, setGeneralKpiData] = useState(null);
+  const [momData, setMomData] = useState(null);
   const [yoyData, setYoyData] = useState(null);
 
   const [salesTrendLoading, setSalesTrendLoading] = useState(true);
@@ -321,11 +322,12 @@ export default function Dashboard() {
     setKpiError('');
     setYoyError('');
 
-    const [salesTrendResult, demandTrendResult, topItemsResult, categoryResult, kpiResult, yoyResult] = await Promise.allSettled([
+    const [salesTrendResult, demandTrendResult, topItemsResult, categoryResult, generalKpiResult, momResult, yoyResult] = await Promise.allSettled([
       fetchSalesTrend(salesTrendYearRange.from, salesTrendYearRange.to),
       fetchSalesTrend(demandTrendYearRange.from, demandTrendYearRange.to),
       fetchTopItems(from, to, 5, itemCategory, itemMode === 'least' ? 'asc' : 'desc'),
       fetchCategoryBreakdown(from, to),
+      fetchKpiSummary(from, to),
       fetchKpiSummary(kpiRange.from, kpiRange.to),
       fetchKpiSummary(yoyRange.from, yoyRange.to),
     ]);
@@ -364,11 +366,18 @@ export default function Dashboard() {
       }
     }
 
-    if (kpiResult.status === 'fulfilled') {
-      setKpiData(kpiResult.value || null);
+    if (generalKpiResult.status === 'fulfilled') {
+      setGeneralKpiData(generalKpiResult.value || null);
     } else {
-      setKpiData(null);
-      setKpiError(kpiResult.reason?.response?.data?.error || 'Unable to load month over month growth.');
+      setGeneralKpiData(null);
+      setKpiError(generalKpiResult.reason?.response?.data?.error || 'Unable to load dashboard totals.');
+    }
+
+    if (momResult.status === 'fulfilled') {
+      setMomData(momResult.value || null);
+    } else {
+      setMomData(null);
+      setKpiError(momResult.reason?.response?.data?.error || 'Unable to load month over month growth.');
     }
 
     if (yoyResult.status === 'fulfilled') {
@@ -447,8 +456,8 @@ export default function Dashboard() {
     return diff > 0 ? diff : 0;
   }, [from, to]);
 
-  const totalRevenue = kpiData?.totalRevenue ?? 0;
-  const totalUnitsSold = kpiData?.totalUnitsSold ?? 0;
+  const totalRevenue = generalKpiData?.totalRevenue ?? 0;
+  const totalUnitsSold = generalKpiData?.totalUnitsSold ?? 0;
   const avgDailyRevenue = periodRangeDays > 0 ? totalRevenue / periodRangeDays : 0;
   const selectedPeriodLabel = periodOptions.find((option) => option.value === period)?.label || 'Selected period';
 
@@ -456,10 +465,10 @@ export default function Dashboard() {
     void loadOverview();
   };
 
-  const momChangePct = kpiData?.monthOverMonth?.changePct ?? null;
+  const momChangePct = momData?.monthOverMonth?.changePct ?? null;
   const isGrowthPositive = momChangePct !== null && momChangePct >= 0;
-  const currentMonthRevenue = kpiData?.monthOverMonth?.currentMonthRevenue ?? 0;
-  const previousMonthRevenue = kpiData?.monthOverMonth?.previousMonthRevenue ?? 0;
+  const currentMonthRevenue = momData?.monthOverMonth?.currentMonthRevenue ?? 0;
+  const previousMonthRevenue = momData?.monthOverMonth?.previousMonthRevenue ?? 0;
   const yoyChangePct = yoyData?.yearOverYear?.changePct ?? null;
   const isYoyGrowthPositive = yoyChangePct !== null && yoyChangePct >= 0;
   const currentYearRevenue = yoyData?.yearOverYear?.currentYearRevenue ?? 0;
