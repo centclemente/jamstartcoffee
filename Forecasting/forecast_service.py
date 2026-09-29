@@ -87,7 +87,7 @@ def load_pretrained_model(key: str):
     return joblib.load(path)
 
 
-def run_pretrained_forecast(key: str, months_ahead: int) -> dict:
+def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6) -> dict:
     """
     Forecasts using a client-supplied pre-trained pmdarima model instead of
     fitting a new one. Returns both "history" (actual monthly units from
@@ -106,28 +106,29 @@ def run_pretrained_forecast(key: str, months_ahead: int) -> dict:
     """
     model = load_pretrained_model(key)
     meta = PRETRAINED_MODEL_META[key]
-    last_known_date = pd.to_datetime(meta["last_trained_month"], format="%Y-%m")
+    sales_df = fetch_monthly_sales()
+    if sales_df.empty:
+        raise ValueError("At least six months of sales history are required for a forecast.")
 
-    last_actual_month = fetch_last_actual_month()
-    if last_actual_month is None:
-        # No data in the Sale table at all -- fall back to today's month
-        # so the service still returns something instead of erroring.
-        last_actual_month = pd.Timestamp(date.today().replace(day=1))
+    recent_df = sales_df.tail(history_months).copy()
+    if len(recent_df) < 6:
+        raise ValueError("At least six months of sales history are required for a forecast.")
 
-    elapsed_months = (
-        (last_actual_month.year - last_known_date.year) * 12
-        + (last_actual_month.month - last_known_date.month)
-    )
-    elapsed_months = max(elapsed_months, 0)  # in case last_trained_month is still "ahead" of your data
-
-    total_periods = elapsed_months + months_ahead
-    predicted, conf_int = model.predict(n_periods=total_periods, return_conf_int=True, alpha=0.05)
-    predicted = np.asarray(predicted)
-    conf_int = np.asarray(conf_int)
+    target_column = "total_revenue" if meta["target"] == "revenue" else "total_units"
+    series = recent_df.set_index(pd.to_datetime(recent_df["month"], format="%Y-%m"))[target_column].astype(float)
+    series.index.freq = "MS"
+    order = getattr(model, "order", (1, 0, 0))
+    try:
+        fitted = ARIMA(series, order=order).fit()
+    except Exception:
+        fitted = ARIMA(series, order=(1, 0, 0)).fit()
+    predicted = np.asarray(fitted.forecast(steps=months_ahead))
+    conf_int = np.asarray(fitted.get_forecast(steps=months_ahead).conf_int(alpha=0.05))
+    last_actual_month = pd.to_datetime(recent_df["month"].iloc[-1], format="%Y-%m")
 
     forecast = []
-    for i in range(elapsed_months, total_periods):
-        future_date = last_known_date + pd.DateOffset(months=i + 1)
+    for i in range(months_ahead):
+        future_date = last_actual_month + pd.DateOffset(months=i + 1)
         forecast.append({
             "month": future_date.strftime("%Y-%m"),
             "predictedValue": round(max(float(predicted[i]), 0)),
@@ -135,9 +136,6 @@ def run_pretrained_forecast(key: str, months_ahead: int) -> dict:
             "upperBound": round(max(float(conf_int[i, 1]), 0)),
         })
 
-    # Actual history from the Sale table, so the frontend has something
-    # solid to draw before the dashed forecast line picks up.
-    sales_df = fetch_monthly_sales()
     history = [
         {
             "month": row.month,
@@ -147,7 +145,7 @@ def run_pretrained_forecast(key: str, months_ahead: int) -> dict:
         for row in sales_df.itertuples()
     ]
 
-    return {"history": history, "forecast": forecast}
+    return {"history": history[-history_months:], "forecast": forecast}
 
 
 def update_pretrained_model(key: str, new_values: list[float]):
@@ -675,6 +673,7 @@ def list_categories():
 def forecast_pretrained(
     key: str,
     months_ahead: int = Query(3, ge=1, le=24, description="How many months to forecast"),
+    history_months: int = Query(6, ge=6, le=24, description="How many recent months to use as the forecast basis"),
 ):
     """
     Serves forecasts straight from the client's pre-trained SARIMA models
@@ -687,7 +686,7 @@ def forecast_pretrained(
             detail=f"No pretrained model for '{key}'. Valid keys: {list(PRETRAINED_MODEL_META)}",
         )
     try:
-        result = run_pretrained_forecast(key, months_ahead)
+        result = run_pretrained_forecast(key, months_ahead, history_months)
     except FileNotFoundError as e:
         raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
@@ -697,6 +696,7 @@ def forecast_pretrained(
         "key": key,
         "target": PRETRAINED_MODEL_META[key]["target"],
         "monthsAhead": months_ahead,
+        "historyMonths": history_months,
         "history": result["history"],
         "forecast": result["forecast"],
     }

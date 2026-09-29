@@ -311,13 +311,20 @@ export async function getSalesForecast(req, res) {
 // ---------------------------------------------------------------------------
 export async function getItemsForecastByCategory(req, res) {
   try {
-    const { monthsAhead = 3 } = req.query;
+    const { monthsAhead = 3, historyMonths = 6 } = req.query;
 
     const parsedMonthsAhead = parseInt(monthsAhead, 10);
     if (isNaN(parsedMonthsAhead) || parsedMonthsAhead < 1 || parsedMonthsAhead > 24) {
       return res
         .status(400)
         .json({ error: "monthsAhead must be a number between 1 and 24." });
+    }
+
+    const parsedHistoryMonths = parseInt(historyMonths, 10);
+    if (isNaN(parsedHistoryMonths) || parsedHistoryMonths < 6 || parsedHistoryMonths > 24) {
+      return res
+        .status(400)
+        .json({ error: "historyMonths must be a number between 6 and 24." });
     }
 
     const { data } = await axios.get(`${FORECAST_SERVICE_URL}/forecast/items-by-category`, {
@@ -361,7 +368,7 @@ export async function getItemsForecastByCategory(req, res) {
 export async function getPretrainedForecast(req, res) {
   try {
     const { key } = req.params;
-    const { monthsAhead = 3 } = req.query;
+    const { monthsAhead = 3, historyMonths = 6 } = req.query;
 
     const parsedMonthsAhead = parseInt(monthsAhead, 10);
     if (isNaN(parsedMonthsAhead) || parsedMonthsAhead < 1 || parsedMonthsAhead > 24) {
@@ -370,10 +377,17 @@ export async function getPretrainedForecast(req, res) {
         .json({ error: "monthsAhead must be a number between 1 and 24." });
     }
 
+    const parsedHistoryMonths = parseInt(historyMonths, 10);
+    if (isNaN(parsedHistoryMonths) || parsedHistoryMonths < 6 || parsedHistoryMonths > 24) {
+      return res
+        .status(400)
+        .json({ error: "historyMonths must be a number between 6 and 24." });
+    }
+
     const { data } = await axios.get(
       `${FORECAST_SERVICE_URL}/forecast/pretrained/${key}`,
       {
-        params: { months_ahead: parsedMonthsAhead },
+        params: { months_ahead: parsedMonthsAhead, history_months: parsedHistoryMonths },
         timeout: PRETRAINED_FORECAST_TIMEOUT_MS,
       }
     );
