@@ -52,11 +52,9 @@ async function fetchJSON(url) {
   return data;
 }
 
-// Custom tooltip so we can hide the "range" series instead of relying on
-// a formatter returning null (inconsistent across Recharts versions).
 function ValueTooltip({ active, payload, label, target }) {
   if (!active || !payload?.length) return null;
-  const visible = payload.filter((p) => p.dataKey !== 'range' && p.value != null);
+  const visible = payload.filter((p) => p.value != null);
   if (!visible.length) return null;
   return (
     <div className="rounded-2xl border border-emerald-900/10 bg-white px-4 py-3 text-sm shadow-sm">
@@ -84,7 +82,6 @@ function buildChartSeries(history, forecast, target, historyWindow = 6) {
     month: h.month,
     actualValue: h[historyField],
     predictedValue: null,
-    range: null,
   }));
   if (historyRows.length) {
     historyRows[historyRows.length - 1].predictedValue =
@@ -94,7 +91,6 @@ function buildChartSeries(history, forecast, target, historyWindow = 6) {
     month: f.month,
     actualValue: null,
     predictedValue: f.predictedValue,
-    range: [f.lowerBound, f.upperBound],
   }));
   return [...historyRows, ...forecastRows];
 }
@@ -118,14 +114,6 @@ function ForecastChart({ chartData, target }) {
           align="right"
           iconType="plainline"
           wrapperStyle={{ fontSize: 12, color: '#14532d', paddingBottom: 8 }}
-        />
-        <Area
-          dataKey="range"
-          stroke="none"
-          fill="#14532d"
-          fillOpacity={0.12}
-          name="Confidence range"
-          legendType="none"
         />
         <Line
           type="linear"
@@ -164,7 +152,6 @@ function ForecastTable({ forecastKey, forecast, expanded, onToggle, target }) {
             <tr className="border-b border-emerald-900/10 text-left text-xs uppercase tracking-[0.2em] text-lime-700/60">
               <th className="py-2 pr-4">Month</th>
               <th className="py-2 pr-4 text-right">Predicted</th>
-              <th className="py-2 pl-4 text-right">Range</th>
             </tr>
           </thead>
           <tbody>
@@ -172,9 +159,6 @@ function ForecastTable({ forecastKey, forecast, expanded, onToggle, target }) {
               <tr key={f.month} className="border-b border-emerald-900/5">
                 <td className="py-2 pr-4 font-medium text-emerald-950">{f.month}</td>
                 <td className="py-2 pr-4 text-right text-emerald-900/80">{fmt(f.predictedValue)}</td>
-                <td className="py-2 pl-4 text-right text-emerald-900/60">
-                  {fmt(f.lowerBound)}–{fmt(f.upperBound)}
-                </td>
               </tr>
             ))}
           </tbody>
