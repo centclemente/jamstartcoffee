@@ -106,29 +106,28 @@ def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6
     """
     model = load_pretrained_model(key)
     meta = PRETRAINED_MODEL_META[key]
+    last_known_date = pd.to_datetime(meta["last_trained_month"], format="%Y-%m")
+
+    last_actual_month = fetch_last_actual_month()
+    if last_actual_month is None:
+        last_actual_month = pd.Timestamp(date.today().replace(day=1))
+
+    elapsed_months = (
+        (last_actual_month.year - last_known_date.year) * 12
+        + (last_actual_month.month - last_known_date.month)
+    )
+    elapsed_months = max(elapsed_months, 0)
+
+    total_periods = elapsed_months + months_ahead
+    predicted, conf_int = model.predict(n_periods=total_periods, return_conf_int=True, alpha=0.05)
+    predicted = np.asarray(predicted)
+    conf_int = np.asarray(conf_int)
+
     sales_df = fetch_monthly_sales()
-    if sales_df.empty:
-        raise ValueError("At least six months of sales history are required for a forecast.")
-
-    recent_df = sales_df.tail(history_months).copy()
-    if len(recent_df) < 6:
-        raise ValueError("At least six months of sales history are required for a forecast.")
-
-    target_column = "total_revenue" if meta["target"] == "revenue" else "total_units"
-    series = recent_df.set_index(pd.to_datetime(recent_df["month"], format="%Y-%m"))[target_column].astype(float)
-    series.index.freq = "MS"
-    order = getattr(model, "order", (1, 0, 0))
-    try:
-        fitted = ARIMA(series, order=order).fit()
-    except Exception:
-        fitted = ARIMA(series, order=(1, 0, 0)).fit()
-    predicted = np.asarray(fitted.forecast(steps=months_ahead))
-    conf_int = np.asarray(fitted.get_forecast(steps=months_ahead).conf_int(alpha=0.05))
-    last_actual_month = pd.to_datetime(recent_df["month"].iloc[-1], format="%Y-%m")
 
     forecast = []
-    for i in range(months_ahead):
-        future_date = last_actual_month + pd.DateOffset(months=i + 1)
+    for i in range(elapsed_months, total_periods):
+        future_date = last_known_date + pd.DateOffset(months=i + 1)
         forecast.append({
             "month": future_date.strftime("%Y-%m"),
             "predictedValue": round(max(float(predicted[i]), 0)),
@@ -145,7 +144,7 @@ def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6
         for row in sales_df.itertuples()
     ]
 
-    return {"history": history[-history_months:], "forecast": forecast}
+    return {"history": history, "forecast": forecast}
 
 
 def update_pretrained_model(key: str, new_values: list[float]):

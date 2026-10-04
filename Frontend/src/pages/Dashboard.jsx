@@ -117,13 +117,12 @@ function formatPercent(value) {
   return `${sign}${value.toFixed(1)}%`;
 }
 
-function SectionCard({ title, description, action, children, className = '' }) {
+function SectionCard({ title, action, children, className = '' }) {
   return (
     <section className={`rounded-[1.5rem] border border-emerald-900/10 bg-[#fbfaf7] p-5 shadow-sm shadow-emerald-950/5 sm:p-6 ${className}`}>
       <div className="flex flex-col gap-4 border-b border-emerald-900/10 pb-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">{title}</p>
-          {description && <p className="mt-2 text-sm text-emerald-900/65">{description}</p>}
+          <p className="text-sm font-semibold uppercase tracking-[0.25em] text-lime-700/80">{title}</p>
         </div>
         {action}
       </div>
@@ -145,6 +144,7 @@ function EmptyState({ title, description }) {
 
 function YearPicker({ value, onChange, availableYears }) {
   const currentYear = new Date().getFullYear();
+  const isAllTime = value === 'all';
   const selectedYear = Number(value) || currentYear;
   const years = availableYears === null ? [selectedYear] : availableYears;
   const firstYear = years[0];
@@ -154,13 +154,22 @@ function YearPicker({ value, onChange, availableYears }) {
     <details className="relative">
       <summary className="flex cursor-pointer list-none items-center gap-2 rounded-2xl border border-emerald-900/10 bg-white px-3 py-2 text-sm text-emerald-950 shadow-sm shadow-emerald-950/5">
         <Calendar className="h-4 w-4 shrink-0 text-emerald-900/45" />
-        <span>{value || 'Select year'}</span>
+        <span>{isAllTime ? 'All time' : value || 'Select year'}</span>
       </summary>
       <div className="absolute right-0 z-20 mt-2 w-56 rounded-2xl border border-emerald-900/10 bg-white p-3 shadow-lg shadow-emerald-950/10">
         <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.2em] text-emerald-900/50">
-          <span>Year</span>
+          <span>Period</span>
           {years.length > 0 && <span>{firstYear}-{lastYear}</span>}
         </div>
+        <button
+          type="button"
+          onClick={() => onChange('all')}
+          className={`mb-2 w-full rounded-xl px-2 py-2 text-left text-sm transition ${
+            isAllTime ? 'bg-emerald-700 font-semibold text-white' : 'text-emerald-950 hover:bg-emerald-50'
+          }`}
+        >
+          All time
+        </button>
         {years.length > 0 ? (
           <div className="grid grid-cols-3 gap-2">
             {years.map((year) => (
@@ -215,8 +224,8 @@ export default function Dashboard() {
 
   const [period, setPeriod] = useState('year');
   const { from, to } = useMemo(() => getPeriodRange(period), [period]);
-  const [salesTrendYear, setSalesTrendYear] = useState(String(new Date().getFullYear()));
-  const [demandTrendYear, setDemandTrendYear] = useState(String(new Date().getFullYear()));
+  const [salesTrendYear, setSalesTrendYear] = useState('all');
+  const [demandTrendYear, setDemandTrendYear] = useState('all');
   const [availableTrendYears, setAvailableTrendYears] = useState(null);
   const salesTrendYearRange = useMemo(() => getCalendarYearRange(salesTrendYear), [salesTrendYear]);
   const demandTrendYearRange = useMemo(() => getCalendarYearRange(demandTrendYear), [demandTrendYear]);
@@ -265,8 +274,8 @@ export default function Dashboard() {
 
         if (years.length > 0) {
           const latestYear = String(years[years.length - 1]);
-          setSalesTrendYear((year) => (years.includes(Number(year)) ? year : latestYear));
-          setDemandTrendYear((year) => (years.includes(Number(year)) ? year : latestYear));
+          setSalesTrendYear((year) => (year === 'all' || years.includes(Number(year)) ? year : latestYear));
+          setDemandTrendYear((year) => (year === 'all' || years.includes(Number(year)) ? year : latestYear));
         }
       })
       .catch(() => {
@@ -489,9 +498,6 @@ export default function Dashboard() {
             <h1 className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight text-emerald-950 sm:text-4xl">
               Welcome back, {name}. Your cafe performance is easy to scan.
             </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-emerald-900/65 sm:text-base">
-              Focus on monthly sales, demand, and top products without the table clutter.
-            </p>
           </div>
 
           <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center">
@@ -554,7 +560,6 @@ export default function Dashboard() {
       <div className="grid gap-6 xl:grid-cols-2">
         <SectionCard
           title="Monthly sales trend"
-          description={`Monthly revenue for ${salesTrendYear}.`}
           action={
             <div className="flex items-center gap-2">
               <span className="text-xs uppercase tracking-[0.18em] text-emerald-900/50">Trend year</span>
@@ -601,7 +606,6 @@ export default function Dashboard() {
 
         <SectionCard
           title="Monthly demand trend"
-          description={`Monthly units sold for ${demandTrendYear}.`}
           action={
             <div className="flex items-center gap-2">
               <span className="text-xs uppercase tracking-[0.18em] text-emerald-900/50">Trend year</span>
@@ -651,7 +655,6 @@ export default function Dashboard() {
       <div className="grid gap-6 xl:grid-cols-6">
         <SectionCard
           title="Month over month growth"
-          description="Current month revenue vs previous month."
           className="xl:col-span-3"
           action={
             <div className="flex flex-wrap items-center gap-2">
@@ -719,7 +722,6 @@ export default function Dashboard() {
 
         <SectionCard
           title="Year over year growth"
-          description="Selected year revenue vs previous year."
           className="xl:col-span-3"
           action={
             <div className="flex flex-wrap items-center gap-2">
@@ -780,7 +782,6 @@ export default function Dashboard() {
 
       <SectionCard
         title={itemMode === 'top' ? 'Top items' : 'Least-selling items'}
-        description={`${itemMode === 'top' ? 'Top' : 'Least'} 5 items by revenue in the selected period.`}
         action={
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -866,6 +867,10 @@ export default function Dashboard() {
 }
 
 function getCalendarYearRange(yearValue) {
+  if (yearValue === 'all') {
+    return getPeriodRange('all');
+  }
+
   if (!/^\d{4}$/.test(yearValue)) return null;
 
   const year = Number(yearValue);

@@ -9,6 +9,7 @@ import {
   LineChart,
   UserRound,
   LogOut,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import logo from '../assets/logo_green.png';
@@ -17,6 +18,7 @@ const adminNavItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { label: 'Activity', icon: Activity, path: '/activity' },
   { label: 'Sales', icon: ClipboardList, path: '/sales' },
+  { label: 'Reports', icon: BarChart3, path: '/reports' },
   { label: 'Forecasting', icon: LineChart, path: '/forecasts' },
   { label: 'Users', icon: UserRound, path: '/users' },
 ];

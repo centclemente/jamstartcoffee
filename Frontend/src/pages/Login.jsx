@@ -1,9 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import logoGreen from '../assets/logo_green.png'; // adjust this path if it errors
+
+function getGreetingByTime() {
+	const hour = new Date().getHours();
+
+	if (hour < 12) return 'Good morning.';
+	if (hour < 18) return 'Good afternoon.';
+	return 'Good evening.';
+}
 
 function Login() {
 	const [email, setEmail] = useState('');
@@ -19,6 +27,15 @@ function Login() {
 
 	const { login } = useAuth();
 	const navigate = useNavigate();
+	const [greeting, setGreeting] = useState(getGreetingByTime());
+
+	useEffect(() => {
+		const updateGreeting = () => setGreeting(getGreetingByTime());
+		updateGreeting();
+
+		const intervalId = window.setInterval(updateGreeting, 60000);
+		return () => window.clearInterval(intervalId);
+	}, []);
 
 	const handleSubmit = async (event) => {
 		event.preventDefault();
@@ -63,13 +80,11 @@ function Login() {
 					</div>
 
 					<h1
-						className="mb-1 text-4xl leading-[1.05] text-[#16281C] sm:text-[2.75rem]"
+						className="mb-10 text-4xl leading-[1.05] text-[#16281C] sm:text-[2.75rem]"
 						style={{ fontFamily: '"Fraunces", ui-serif, Georgia, serif' }}
 					>
-						Good morning.
+						{greeting}
 					</h1>
-					<p className="mb-10 text-[#4B6A3B]">Sign in to open today's shift.</p>
-
 					{error && (
 						<div className="mb-6 border-l-2 border-red-400 bg-red-50/80 px-4 py-3 text-sm text-red-700">
 							{error}
@@ -171,9 +186,6 @@ function Login() {
 						)}
 					</div>
 
-					<p className="mt-8 text-xs text-[#16281C]/45">
-						Secure access for your cafe's operations and forecasting tools.
-					</p>
 				</div>
 			</div>
 		</main>

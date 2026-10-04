@@ -3,7 +3,6 @@ import Dropdown from './Dropdown';
 
 export default function Table({
   title,
-  description,
   searchValue,
   onSearchChange,
   searchPlaceholder = 'Search',
@@ -19,11 +18,10 @@ export default function Table({
 }) {
   return (
     <section className="rounded-[1.5rem] border border-emerald-900/10 bg-[#fbfaf7] p-5 shadow-sm shadow-emerald-950/5 sm:p-6">
-      {(title || description || onSearchChange || (onFilterChange && filterOptions.length > 0) || actions) && (
+      {(title || onSearchChange || (onFilterChange && filterOptions.length > 0) || actions) && (
         <div className="flex flex-col gap-4 border-b border-emerald-900/10 pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             {title && <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">{title}</p>}
-            {description && <p className="mt-2 text-sm text-emerald-900/65">{description}</p>}
           </div>
 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-end">

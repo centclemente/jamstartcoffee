@@ -29,15 +29,13 @@ const MONTH_OPTIONS = [3, 6, 12];
 const PRETRAINED_MODELS = [
   {
     key: 'sarima',
-    label: 'Sales forecast',
+    label: 'Gross sales forecast',
     eyebrow: 'Pretrained model',
-    description: 'Projected units from the pretrained SARIMA model.',
   },
   {
     key: 'demand',
     label: 'Demand forecast',
     eyebrow: 'Pretrained model',
-    description: 'Projected demand from the pretrained demand model.',
   },
 ];
 
@@ -265,12 +263,8 @@ export default function Forecasts() {
         <div className="max-w-2xl">
           <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">Forecasts</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight text-emerald-950 sm:text-4xl">
-            Sales forecast
+            Gross sales forecast
           </h1>
-          <p className="mt-3 text-sm leading-6 text-emerald-900/65 sm:text-base">
-            Projections from the pretrained SARIMA and demand models. Each section has its own
-            forecast window.
-          </p>
         </div>
       </div>
 
@@ -284,7 +278,7 @@ export default function Forecasts() {
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-lime-700/60">Pretrained model</p>
                 <h2 className="mt-1 text-2xl font-semibold tracking-tight text-emerald-950">
-                  Sales forecast
+                  Gross sales forecast
                 </h2>
               </div>
             </div>

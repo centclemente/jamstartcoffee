@@ -1,9 +1,9 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client-js"   // keep whatever your generator block already has
 }
 
 datasource db {
-  provider  = "postgresql"
+  provider = "postgresql"
 }
 
 

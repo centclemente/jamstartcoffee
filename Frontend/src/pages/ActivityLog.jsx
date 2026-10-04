@@ -103,9 +103,6 @@ export default function ActivityLog() {
           </div>
           <div>
             <h2 className="text-3xl font-semibold tracking-tight text-emerald-950">Activity log</h2>
-            <p className="mt-1 text-sm text-emerald-900/65">
-              A focused trail of logins, creates, updates, imports, and exports.
-            </p>
           </div>
         </div>
 
@@ -129,7 +126,6 @@ export default function ActivityLog() {
 
       <Table
         title="Recent activity"
-        description="Search by actor or action to trace what happened across the system."
         searchValue={searchValue}
         onSearchChange={setSearchValue}
         searchPlaceholder="Search activity"

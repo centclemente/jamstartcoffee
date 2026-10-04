@@ -517,7 +517,6 @@ export default function Users() {
         <div className="flex flex-col gap-2 border-b border-emerald-900/10 pb-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">Password requests</p>
-            <p className="mt-2 text-sm text-emerald-900/65">Review requests from users who need help signing in.</p>
           </div>
           <span className="text-xs uppercase tracking-[0.2em] text-emerald-900/50">{passwordRequests.length} pending</span>
         </div>

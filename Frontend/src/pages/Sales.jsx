@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Archive, BarChart3, Calendar, ClipboardList, Download, Package, Pencil, Plus, RefreshCcw, RotateCcw, Upload } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Archive, Calendar, Download, Package, Pencil, Plus, RefreshCcw, RotateCcw, Upload } from 'lucide-react';
 
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
@@ -25,8 +24,6 @@ const emptyImportSummary = null;
 const emptySale = { date: '', item_name: '', category: '', net_price: '', items_sold: '', totalSales: '' };
 
 export default function Sales() {
-  const navigate = useNavigate();
-  const location = useLocation();
   const { user } = useAuth();
   const isAdmin = user?.role === 'Admin';
   const [sales, setSales] = useState([]);
@@ -354,48 +351,6 @@ export default function Sales() {
 
   return (
     <section className="grid gap-6">
-      <div className="overflow-hidden rounded-[1.5rem] border border-emerald-900/10 bg-[#fbfaf7] shadow-sm shadow-emerald-950/5">
-        <div className="flex items-start gap-4 border-b border-emerald-900/10 px-6 py-5">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-blue-200/70 bg-blue-50 text-blue-600">
-            <Package className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-3xl font-semibold tracking-tight text-emerald-950">Sales Management</h2>
-            <p className="mt-1 text-sm text-emerald-900/65">Manage sales records and generate analytics reports.</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 px-5 pt-3">
-          <button
-            type="button"
-            onClick={() => navigate('/sales')}
-            className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition ${
-              location.pathname === '/sales'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-emerald-900/70 hover:text-emerald-950'
-            }`}
-          >
-            <ClipboardList className="h-4 w-4" />
-            Sales Records
-          </button>
-
-          <button
-            type="button"
-            onClick={() => navigate('/reports')}
-              disabled={!isAdmin}
-            className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition ${
-              isAdmin && location.pathname === '/reports'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-emerald-900/70 hover:text-emerald-950'
-            }`}
-              aria-hidden={!isAdmin}
-          >
-              <BarChart3 className="h-4 w-4" />
-              Reports
-          </button>
-        </div>
-      </div>
-
       <div className="rounded-[1.5rem] border border-emerald-900/10 bg-[#fbfaf7] p-6 sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -506,7 +461,6 @@ export default function Sales() {
 
       <Table
         title="Sales table"
-        description="Search by item name, filter by category, or narrow by month."
         searchValue={searchInput}
         onSearchChange={setSearchInput}
         searchPlaceholder="Search item name"
