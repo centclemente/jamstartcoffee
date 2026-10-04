@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
-  Area,
   CartesianGrid,
   ComposedChart,
   Legend,
@@ -185,6 +184,48 @@ function ForecastTable({ forecastKey, forecast, expanded, onToggle, target }) {
   );
 }
 
+function CategoryContributionTable({ contribution, target }) {
+  const months = contribution || [];
+  const categories = [...new Set(months.flatMap((month) => (month.categories || []).map((item) => item.category)))];
+  if (!months.length || !categories.length) return null;
+
+  return (
+    <div className="mt-6 border-t border-emerald-900/10 pt-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-950">
+          Category contribution estimate
+        </h3>
+        <span className="text-xs text-emerald-900/50">Last 6 months average share</span>
+      </div>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[620px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-emerald-900/10 text-left text-xs uppercase tracking-[0.16em] text-lime-700/60">
+              <th className="py-2 pr-4">Category</th>
+              {months.map((month) => <th key={month.month} className="px-3 py-2 text-right">{month.month}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {categories.map((category) => (
+              <tr key={category} className="border-b border-emerald-900/5">
+                <td className="py-2 pr-4 font-medium text-emerald-950">{category}</td>
+                {months.map((month) => {
+                  const item = (month.categories || []).find((entry) => entry.category === category);
+                  return (
+                    <td key={`${category}-${month.month}`} className="px-3 py-2 text-right text-emerald-900/75">
+                      {item ? <><span className="block font-medium">{formatValue(item.amount, target)}</span><span className="text-xs text-emerald-900/50">{item.percentage.toFixed(1)}%</span></> : '—'}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function Forecasts() {
   // One entry per pretrained model key -- { sarima: {...}, demand: {...} }
   const [pretrained, setPretrained] = useState({});
@@ -312,13 +353,16 @@ export default function Forecasts() {
           </div>
 
           {!salesLoading && !salesError && salesChartData.length > 0 && (
-            <ForecastTable
-              forecastKey="sarima"
-              forecast={salesData.forecast}
-              expanded={!!expandedTables.sarima}
-              onToggle={toggleTable}
-              target={salesTarget}
-            />
+            <>
+              <ForecastTable
+                forecastKey="sarima"
+                forecast={salesData.forecast}
+                expanded={!!expandedTables.sarima}
+                onToggle={toggleTable}
+                target={salesTarget}
+              />
+              <CategoryContributionTable contribution={salesData.category_contribution} target={salesTarget} />
+            </>
           )}
       </div>
 
@@ -408,13 +452,16 @@ export default function Forecasts() {
               </div>
 
               {!loading && !error && chartData.length > 0 && (
-                <ForecastTable
-                  forecastKey={key}
-                  forecast={data.forecast}
-                  expanded={!!expandedTables[key]}
-                  onToggle={toggleTable}
-                  target={target}
-                />
+                <>
+                  <ForecastTable
+                    forecastKey={key}
+                    forecast={data.forecast}
+                    expanded={!!expandedTables[key]}
+                    onToggle={toggleTable}
+                    target={target}
+                  />
+                  <CategoryContributionTable contribution={data.category_contribution} target={target} />
+                </>
               )}
             </>
           );

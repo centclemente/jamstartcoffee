@@ -1,4 +1,5 @@
 import itertools
+import json
 import logging
 import os
 import warnings
@@ -16,6 +17,8 @@ from fastapi import FastAPI, HTTPException, Query
 from prophet import Prophet
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
+
+from category_contribution import compute_category_contribution, generate_category_insight
 
 # Silence Prophet/cmdstanpy's verbose "Log joint probability" console spam
 logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
@@ -144,7 +147,24 @@ def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6
         for row in sales_df.itertuples()
     ]
 
-    return {"history": history, "forecast": forecast}
+    category_history = fetch_monthly_category_sales()
+    forecast_frame = pd.DataFrame(forecast)
+    category_contribution = compute_category_contribution(
+        category_history,
+        forecast_frame,
+        meta["target"],
+    )
+    category_insight = generate_category_insight(
+        json.dumps(category_contribution, sort_keys=True, separators=(",", ":")),
+        meta["target"],
+    )
+
+    return {
+        "history": history,
+        "forecast": forecast,
+        "category_contribution": category_contribution,
+        "category_insight": category_insight,
+    }
 
 
 def update_pretrained_model(key: str, new_values: list[float]):
@@ -212,6 +232,25 @@ def fetch_monthly_sales(category: Optional[str] = None, item_name: Optional[str]
 
         df = pd.read_sql(query, conn, params=params)
         return df
+    finally:
+        conn.close()
+
+
+def fetch_monthly_category_sales() -> pd.DataFrame:
+    """Pull monthly category totals for contribution estimates only."""
+    conn = get_connection()
+    try:
+        query = """
+            SELECT to_char(date_trunc('month', date), 'YYYY-MM') AS month,
+                   category,
+                   SUM("totalSales")::float AS total_revenue,
+                   SUM(items_sold)::int AS total_units
+            FROM "Sale"
+            WHERE "archivedAt" IS NULL
+            GROUP BY date_trunc('month', date), category
+            ORDER BY date_trunc('month', date) ASC, category ASC
+        """
+        return pd.read_sql(query, conn)
     finally:
         conn.close()
 
@@ -698,4 +737,6 @@ def forecast_pretrained(
         "historyMonths": history_months,
         "history": result["history"],
         "forecast": result["forecast"],
+        "category_contribution": result["category_contribution"],
+        "category_insight": result["category_insight"],
     }

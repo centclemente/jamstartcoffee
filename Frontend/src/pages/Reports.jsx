@@ -407,6 +407,24 @@ function makeTemplatePdf(report, subtitle) {
     itemBySales[0] && itemByUnits[0]
       ? `${itemBySales[0].item_name || itemBySales[0].item} leads sales at ${peso(itemBySales[0].totalSales)} while ${itemByUnits[0].item_name || itemByUnits[0].item} leads volume at ${num(itemByUnits[0].items_sold)} units.`
       : insightFor(report);
+  const contributionSection = (sectionTitle, contribution, metric, aiInsight) => {
+    if (!contribution?.length) return;
+    const months = contribution.map((entry) => entry.month);
+    const categories = [...new Set(contribution.flatMap((entry) => (entry.categories || []).map((item) => item.category)))];
+    title(sectionTitle);
+    text("Estimated from each category's average share across the last six actual months; this is not a separate category forecast.", 8.2);
+    table(
+      [{ header: "Category", key: "category", width: 1.4 }, ...months.map((month) => ({ header: month, key: month, width: 1 }))],
+      categories.map((category) => ({
+        category,
+        ...Object.fromEntries(months.map((month) => {
+          const item = (contribution.find((entry) => entry.month === month)?.categories || []).find((entry) => entry.category === category);
+          return [month, item ? `${metric === "revenue" ? peso(item.amount) : num(item.amount)} (${item.percentage.toFixed(1)}%)` : "—"];
+        })),
+      })),
+    );
+    if (aiInsight) insight(aiInsight);
+  };
 
   header();
   y = 38;
@@ -602,6 +620,8 @@ function makeTemplatePdf(report, subtitle) {
       percentage: "100%",
     })),
   );
+  contributionSection("Part 5: Category Contribution — Sales", report.salesContribution, "revenue", report.salesInsight);
+  contributionSection("Part 6: Category Contribution — Demand", report.demandContribution, "units", report.demandInsight);
   text(
     "Category-level forecast values are allocated top-down from the overall SARIMA forecast, using each category's recent historical share of total sales/demand.",
     8.2,
@@ -887,6 +907,10 @@ export default function Reports() {
           itemRows: items.data.rows || [],
           categoryRows: categories.data.rows || [],
           forecastRows,
+          salesContribution: revenueForecast.data.category_contribution || [],
+          demandContribution: demandForecast.data.category_contribution || [],
+          salesInsight: revenueForecast.data.category_insight || "",
+          demandInsight: demandForecast.data.category_insight || "",
         });
       } else {
         const { data } = await api.get("/analytics/forecast-pretrained/sarima", {
