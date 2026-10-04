@@ -458,16 +458,17 @@ export default function Dashboard() {
     [topItemsData]
   );
 
-  const periodRangeDays = useMemo(() => {
+  const periodRangeMonths = useMemo(() => {
     const start = new Date(from);
     const end = new Date(to);
-    const diff = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const diff = (end.getUTCFullYear() - start.getUTCFullYear()) * 12 + end.getUTCMonth() - start.getUTCMonth() + 1;
     return diff > 0 ? diff : 0;
   }, [from, to]);
 
   const totalRevenue = generalKpiData?.totalRevenue ?? 0;
   const totalUnitsSold = generalKpiData?.totalUnitsSold ?? 0;
-  const avgDailyRevenue = periodRangeDays > 0 ? totalRevenue / periodRangeDays : 0;
+  const avgMonthlyGrossSales = periodRangeMonths > 0 ? totalRevenue / periodRangeMonths : 0;
+  const avgMonthlyUnitsSold = periodRangeMonths > 0 ? totalUnitsSold / periodRangeMonths : 0;
   const selectedPeriodLabel = periodOptions.find((option) => option.value === period)?.label || 'Selected period';
 
   const handleRefresh = () => {
@@ -530,7 +531,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiStatCard
           icon={<Wallet className="h-6 w-6" />}
           label="Total sales"
@@ -549,9 +550,17 @@ export default function Dashboard() {
         />
         <KpiStatCard
           icon={<Activity className="h-6 w-6" />}
-          label="Average daily revenue"
-          value={formatCurrency(avgDailyRevenue)}
-          sublabel={periodRangeDays ? `Across ${periodRangeDays} days` : selectedPeriodLabel}
+          label="Average monthly gross sales"
+          value={formatCurrency(avgMonthlyGrossSales)}
+          sublabel={periodRangeMonths ? `Across ${periodRangeMonths} months` : selectedPeriodLabel}
+          loading={kpiLoading}
+          error={kpiError}
+        />
+        <KpiStatCard
+          icon={<Activity className="h-6 w-6" />}
+          label="Average monthly units sold"
+          value={formatNumber(avgMonthlyUnitsSold)}
+          sublabel={periodRangeMonths ? `Across ${periodRangeMonths} months` : selectedPeriodLabel}
           loading={kpiLoading}
           error={kpiError}
         />
