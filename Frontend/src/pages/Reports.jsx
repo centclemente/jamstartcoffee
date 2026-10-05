@@ -172,6 +172,10 @@ function drawChart(pdf, rows, key, x, y, width, height, color, label) {
   const values = rows.map((row) => Number(row[key] || 0));
   const max = Math.max(...values, 1);
   const step = rows.length > 1 ? width / (rows.length - 1) : 0;
+  const labelStride = Math.max(1, Math.ceil(rows.length / 12));
+  const colorsForChartText = [65, 88, 76];
+  const valueLabel = (value) =>
+    key === "totalSales" || key === "predictedValue" ? peso(value) : num(value);
   pdf.setDrawColor(210, 226, 216);
   pdf.line(x, y + height, x + width, y + height);
   pdf.line(x, y, x, y + height);
@@ -186,12 +190,23 @@ function drawChart(pdf, rows, key, x, y, width, height, color, label) {
     }
     pdf.setFillColor(...color);
     pdf.circle(pointX, pointY, 1, "F");
-    if (index === 0 || index === values.length - 1) {
+    pdf.setFontSize(values.length > 18 ? 4.5 : 5.8);
+    const numericLabel = valueLabel(value);
+    const labelWidth = pdf.getTextWidth(numericLabel) + 3;
+    const preferredLabelY = index % 2 === 0 ? pointY - 4 : pointY + 7;
+    const labelY = Math.min(y + height - 5, Math.max(y + 5, preferredLabelY));
+    const labelX = Math.min(x + width - labelWidth / 2, Math.max(x + labelWidth / 2, pointX));
+    pdf.setFillColor(255, 255, 255);
+    pdf.setDrawColor(220, 232, 224);
+    pdf.roundedRect(labelX - labelWidth / 2, labelY - 3.5, labelWidth, 4.5, 1, 1, "F");
+    pdf.setTextColor(...colorsForChartText);
+    pdf.text(numericLabel, labelX, labelY, { align: "center" });
+    if (index % labelStride === 0 || index === values.length - 1) {
       const pointLabel =
         rows[index].month || rows[index].item || rows[index].name || String(index + 1);
-      pdf.setFontSize(6.5);
+      pdf.setFontSize(values.length > 18 ? 5 : 6.5);
       pdf.setTextColor(80, 105, 92);
-      pdf.text(String(pointLabel), pointX, y + height + 5, { align: index ? "right" : "left" });
+      pdf.text(String(pointLabel), pointX, y + height + 5, { align: "center" });
     }
   });
   pdf.setFontSize(7);
@@ -252,7 +267,7 @@ function makeTemplatePdf(report, subtitle) {
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(size);
     pdf.text(value, margin, y);
-    y += size * 0.65 + 4;
+    y += size * 0.65 + 7;
   };
   const subTitle = (value) => {
     page();
@@ -260,21 +275,30 @@ function makeTemplatePdf(report, subtitle) {
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(10);
     pdf.text(value, margin, y);
-    y += 6;
+    y += 9;
   };
   const text = (value, size = 8.5, color = colors.ink) => {
     pdf.setTextColor(...color);
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(size);
     const lines = pdf.splitTextToSize(String(value), contentWidth);
-    page();
+    const blockHeight = lines.length * 4.4 + 7;
+    if (y + blockHeight > height - 20) {
+      pdf.addPage();
+      header();
+      y = 34;
+    }
     pdf.text(lines, margin, y);
-    y += lines.length * 4.2 + 4;
+    y += blockHeight;
   };
   const insight = (value) => {
     const lines = pdf.splitTextToSize(value, contentWidth - 10);
-    page();
     const boxHeight = Math.max(20, lines.length * 4.1 + 11);
+    if (y + boxHeight > height - 20) {
+      pdf.addPage();
+      header();
+      y = 34;
+    }
     pdf.setFillColor(...colors.pale);
     pdf.roundedRect(margin, y, contentWidth, boxHeight, 2.5, 2.5, "F");
     pdf.setTextColor(...colors.forest);
@@ -285,7 +309,7 @@ function makeTemplatePdf(report, subtitle) {
     pdf.setTextColor(...colors.ink);
     pdf.setFontSize(8.2);
     pdf.text(lines, margin + 4, y + 12);
-    y += boxHeight + 7;
+    y += boxHeight + 10;
   };
   const table = (columns, values, rowHeight = 7) => {
     const widths = columns.map((column) => column.width || 1);
@@ -320,7 +344,7 @@ function makeTemplatePdf(report, subtitle) {
           );
     };
     const drawHeader = () => {
-      if (y + rowHeight > height - 20) {
+      if (y + rowHeight > height - 24) {
         pdf.addPage();
         header();
         y = 34;
@@ -334,7 +358,7 @@ function makeTemplatePdf(report, subtitle) {
         rowHeight,
         row.reduce((max, cell) => Math.max(max, cell.length), 1) * 3.2 + 3.5,
       );
-      if (y + rowHeightForData > height - 20) {
+      if (y + rowHeightForData > height - 24) {
         pdf.addPage();
         header();
         y = 34;
@@ -342,7 +366,7 @@ function makeTemplatePdf(report, subtitle) {
       }
       drawRow(row, false, index);
     });
-    y += 6;
+    y += 10;
   };
   const figure = (caption, chartRows, key, color = colors.forest, secondKey) => {
     page();
@@ -350,7 +374,25 @@ function makeTemplatePdf(report, subtitle) {
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(8.5);
     pdf.text(caption, margin, y);
-    y += 6;
+    y += 8;
+    const legends = secondKey
+      ? [
+          { label: "Sales", color },
+          { label: "Units sold", color: colors.lime },
+        ]
+      : [{ label: key === "predictedValue" ? "Forecast" : key === "unitsValue" ? "Units sold" : "Sales", color }];
+    let legendX = margin;
+    legends.forEach(({ label, color: legendColor }) => {
+      pdf.setDrawColor(...legendColor);
+      pdf.setLineWidth(0.8);
+      pdf.line(legendX, y - 1.5, legendX + 5, y - 1.5);
+      pdf.setTextColor(...colors.ink);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7);
+      pdf.text(label, legendX + 7, y);
+      legendX += 28;
+    });
+    y += 5;
     drawChart(
       pdf,
       chartRows,
@@ -374,7 +416,7 @@ function makeTemplatePdf(report, subtitle) {
         colors.lime,
         "Units sold",
       );
-    y += secondKey ? 86 : 52;
+    y += secondKey ? 92 : 58;
   };
   const formatItem = (row) => ({
     item: row.item_name || row.item || row.name,
