@@ -277,6 +277,7 @@ export default function Sales() {
       await api.patch(`/sales/${sale.id}/${restore ? 'restore' : 'archive'}`);
       setSuccess(restore ? 'Sale record restored.' : 'Sale record archived.');
       setPendingArchive(null);
+      window.dispatchEvent(new Event('sales-data-changed'));
       await loadSales();
     } catch (err) {
       setError(err.response?.data?.error || `Unable to ${restore ? 'restore' : 'archive'} sale record.`);

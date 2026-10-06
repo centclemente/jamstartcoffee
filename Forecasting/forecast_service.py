@@ -192,7 +192,7 @@ def fetch_last_actual_month() -> Optional[pd.Timestamp]:
     conn = get_connection()
     try:
         df = pd.read_sql(
-            'SELECT to_char(date_trunc(\'month\', MAX(date)), \'YYYY-MM\') AS last_month FROM "Sale"',
+            'SELECT to_char(date_trunc(\'month\', MAX(date)), \'YYYY-MM\') AS last_month FROM "Sale" WHERE "archivedAt" IS NULL',
             conn,
         )
         last_month = df["last_month"].iloc[0]
@@ -216,7 +216,7 @@ def fetch_monthly_sales(category: Optional[str] = None, item_name: Optional[str]
                    SUM("totalSales")::float AS total_revenue,
                    SUM(items_sold)::int AS total_units
             FROM "Sale"
-            WHERE 1=1
+            WHERE "archivedAt" IS NULL
         """
         params = []
 
@@ -698,7 +698,7 @@ def list_categories():
     """Helper endpoint so the frontend can populate a category dropdown for /forecast/sales."""
     conn = get_connection()
     try:
-        df = pd.read_sql('SELECT DISTINCT category FROM "Sale" ORDER BY category ASC', conn)
+        df = pd.read_sql('SELECT DISTINCT category FROM "Sale" WHERE "archivedAt" IS NULL ORDER BY category ASC', conn)
         return {"categories": df["category"].tolist()}
     finally:
         conn.close()

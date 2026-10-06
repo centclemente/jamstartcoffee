@@ -23,7 +23,7 @@ export async function getSalesTrend(req, res) {
         SUM("totalSales")::float AS total_revenue,
         SUM(items_sold)::int AS total_units
       FROM "Sale"
-      WHERE date >= ${from} AND date <= ${to}
+      WHERE "archivedAt" IS NULL AND date >= ${from} AND date <= ${to}
       GROUP BY date_trunc('month', date)
       ORDER BY month ASC
     `;
@@ -56,7 +56,7 @@ export async function getTopItems(req, res) {
         SUM(items_sold)::int AS units_sold,
         SUM("totalSales")::float AS revenue
       FROM "Sale"
-      WHERE date >= ${from} AND date <= ${to}
+      WHERE "archivedAt" IS NULL AND date >= ${from} AND date <= ${to}
         ${categoryClause}
       GROUP BY item_name, category
       ${orderClause}
@@ -89,7 +89,7 @@ export async function getCategoryBreakdown(req, res) {
         SUM(items_sold)::int AS units_sold,
         SUM("totalSales")::float AS revenue
       FROM "Sale"
-      WHERE date >= ${from} AND date <= ${to}
+      WHERE "archivedAt" IS NULL AND date >= ${from} AND date <= ${to}
       GROUP BY category
       ORDER BY revenue DESC
     `;
@@ -119,7 +119,7 @@ export async function getKpiSummary(req, res) {
         SUM(items_sold)::int AS total_units,
         COUNT(*)::int AS total_transactions
       FROM "Sale"
-      WHERE date >= ${from} AND date <= ${to}
+      WHERE "archivedAt" IS NULL AND date >= ${from} AND date <= ${to}
     `;
 
         const currentMonthStart = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
@@ -132,7 +132,7 @@ export async function getKpiSummary(req, res) {
         date_trunc('month', date) AS month,
         SUM("totalSales")::float AS revenue
       FROM "Sale"
-      WHERE date >= ${previousMonthStart} AND date < ${new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() + 1, 1))}
+      WHERE "archivedAt" IS NULL AND date >= ${previousMonthStart} AND date < ${new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() + 1, 1))}
       GROUP BY date_trunc('month', date)
       ORDER BY month ASC
     `;
@@ -142,7 +142,7 @@ export async function getKpiSummary(req, res) {
         date_trunc('year', date) AS year,
         SUM("totalSales")::float AS revenue
       FROM "Sale"
-      WHERE date >= ${previousYearStart} AND date <= ${to}
+      WHERE "archivedAt" IS NULL AND date >= ${previousYearStart} AND date <= ${to}
       GROUP BY date_trunc('year', date)
       ORDER BY year ASC
     `;
@@ -211,6 +211,7 @@ export async function getSalesTable(req, res) {
       req.analyticsQuery;
 
     const where = {
+      archivedAt: null,
       date: { gte: from, lte: to },
       ...(item ? { item_name: { contains: item, mode: "insensitive" } } : {}),
       ...(category ? { category: { contains: category, mode: "insensitive" } } : {}),

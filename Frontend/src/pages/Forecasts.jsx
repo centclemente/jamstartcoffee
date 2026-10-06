@@ -28,7 +28,7 @@ const MONTH_OPTIONS = [3, 6, 12];
 const PRETRAINED_MODELS = [
   {
     key: 'sarima',
-    label: 'Gross sales forecast',
+    label: 'FORECASTS',
     eyebrow: 'Pretrained model',
   },
   {
@@ -266,6 +266,15 @@ export default function Forecasts() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const handleSalesDataChanged = () => {
+      PRETRAINED_MODELS.forEach((m) => loadPretrained(m.key, pretrainedMonthsAhead[m.key]));
+    };
+
+    window.addEventListener('sales-data-changed', handleSalesDataChanged);
+    return () => window.removeEventListener('sales-data-changed', handleSalesDataChanged);
+  }, [pretrainedMonthsAhead]);
+
   // --- Sales forecast (sarima) -- the primary panel, with its own summary card ---
   const salesData = pretrained.sarima;
   const salesLoading = pretrainedLoading.sarima;
@@ -288,7 +297,7 @@ export default function Forecasts() {
         <div className="max-w-2xl">
           <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">Forecasts</p>
           <h1 className="mt-3 text-3xl font-semibold tracking-tight text-emerald-950 sm:text-4xl">
-            Gross sales forecast
+           FORECASTS
           </h1>
         </div>
       </div>

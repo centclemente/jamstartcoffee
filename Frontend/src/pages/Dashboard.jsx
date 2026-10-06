@@ -407,6 +407,15 @@ export default function Dashboard() {
   }, [loadOverview]);
 
   useEffect(() => {
+    const handleSalesDataChanged = () => {
+      void loadOverview();
+    };
+
+    window.addEventListener('sales-data-changed', handleSalesDataChanged);
+    return () => window.removeEventListener('sales-data-changed', handleSalesDataChanged);
+  }, [loadOverview]);
+
+  useEffect(() => {
     if (kpiMonthInitializedRef.current || salesTrendLoading || salesTrendData.length === 0) return;
 
     const latestMonthWithData = [...salesTrendData].reverse()[0];
@@ -534,7 +543,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiStatCard
           icon={<Wallet className="h-6 w-6" />}
-          label="Total sales"
+          label="Total Gross sales"
           value={formatCurrency(totalRevenue)}
           sublabel={selectedPeriodLabel}
           loading={kpiLoading}
