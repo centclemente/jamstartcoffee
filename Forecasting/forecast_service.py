@@ -128,6 +128,40 @@ def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6
 
     sales_df = fetch_monthly_sales()
 
+    comparison = []
+    target_field = "total_revenue" if meta["target"] == "revenue" else "total_units"
+    evaluated_errors = []
+    evaluated_percentage_errors = []
+    for row in sales_df.itertuples():
+        actual_date = pd.to_datetime(row.month, format="%Y-%m")
+        prediction_index = (
+            (actual_date.year - last_known_date.year) * 12
+            + (actual_date.month - last_known_date.month)
+            - 1
+        )
+        # The model was trained through last_trained_month, so only compare
+        # predictions for later completed months. Never score in-sample data.
+        if prediction_index < 0 or prediction_index >= elapsed_months:
+            continue
+
+        actual_value = float(getattr(row, target_field))
+        predicted_value = max(float(predicted[prediction_index]), 0)
+        error = actual_value - predicted_value
+        absolute_error = abs(error)
+        evaluated_errors.append(error)
+        if actual_value != 0:
+            evaluated_percentage_errors.append(absolute_error / abs(actual_value) * 100)
+
+        comparison.append({
+            "month": row.month,
+            "actualValue": round(actual_value, 2),
+            "predictedValue": round(max(predicted_value, 0), 2),
+            "errorAmount": round(error, 2),
+            "errorPct": round(error / actual_value * 100, 2) if actual_value != 0 else None,
+            "accuracyPct": round(max(0, 100 - (absolute_error / abs(actual_value) * 100)), 2)
+            if actual_value != 0 else None,
+        })
+
     forecast = []
     for i in range(elapsed_months, total_periods):
         future_date = last_known_date + pd.DateOffset(months=i + 1)
@@ -162,6 +196,15 @@ def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6
     return {
         "history": history,
         "forecast": forecast,
+        "comparison": comparison,
+        "accuracy": {
+            "evaluatedMonths": len(comparison),
+            "mae": round(float(np.mean(np.abs(evaluated_errors))), 2) if evaluated_errors else None,
+            "rmse": round(float(np.sqrt(np.mean(np.square(evaluated_errors)))), 2)
+            if evaluated_errors else None,
+            "mape": round(float(np.mean(evaluated_percentage_errors)), 2)
+            if evaluated_percentage_errors else None,
+        },
         "category_contribution": category_contribution,
         "category_insight": category_insight,
     }
@@ -737,6 +780,8 @@ def forecast_pretrained(
         "historyMonths": history_months,
         "history": result["history"],
         "forecast": result["forecast"],
+        "comparison": result["comparison"],
+        "accuracy": result["accuracy"],
         "category_contribution": result["category_contribution"],
         "category_insight": result["category_insight"],
     }

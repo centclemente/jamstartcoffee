@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Archive, Calendar, Download, Package, Pencil, Plus, RefreshCcw, RotateCcw, Upload } from 'lucide-react';
+import { Archive, Calendar, CheckCircle2, Download, Pencil, Plus, RefreshCcw, RotateCcw, Upload, X } from 'lucide-react';
 
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
@@ -20,7 +20,6 @@ const formatMonth = (value) =>
 const formatCurrency = (value) =>
   new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value) || 0);
 
-const emptyImportSummary = null;
 const emptySale = { date: '', item_name: '', category: '', net_price: '', items_sold: '', totalSales: '' };
 
 export default function Sales() {
@@ -46,8 +45,12 @@ export default function Sales() {
   const [totalRows, setTotalRows] = useState(0);
 
   const [importing, setImporting] = useState(false);
+  const [importValidating, setImportValidating] = useState(false);
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importValidation, setImportValidation] = useState(null);
+  const [importModalError, setImportModalError] = useState('');
   const [exporting, setExporting] = useState(false);
-  const [importSummary, setImportSummary] = useState(emptyImportSummary);
   const [saleFormOpen, setSaleFormOpen] = useState(false);
   const [editingSale, setEditingSale] = useState(null);
   const [saleForm, setSaleForm] = useState(emptySale);
@@ -139,27 +142,55 @@ export default function Sales() {
   }, [success]);
 
   const handleImportClick = () => {
-    fileInputRef.current?.click();
+    setImportFile(null);
+    setImportValidation(null);
+    setImportModalError('');
+    setImportModalOpen(true);
   };
 
   const handleFileSelected = async (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    setImporting(true);
+    setImportFile(file);
+    setImportValidation(null);
+    setImportModalError('');
+    event.target.value = '';
+  };
+
+  const closeImportModal = () => {
+    if (importing || importValidating) return;
+    setImportModalOpen(false);
+    setImportFile(null);
+    setImportValidation(null);
+    setImportModalError('');
+  };
+
+  const submitImport = async () => {
+    if (!importFile) return;
+
+    setImportModalError('');
     setError('');
     setSuccess('');
-    setImportSummary(null);
+
+    const formData = new FormData();
+    formData.append('file', importFile);
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      if (!importValidation) {
+        setImportValidating(true);
+        const response = await api.post('/sales/import?validateOnly=true', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        setImportValidation(response.data);
+        return;
+      }
 
+      setImporting(true);
       const response = await api.post('/sales/import', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      setImportSummary(response.data);
       setSuccess(`Imported ${response.data.inserted} of ${response.data.totalRows} rows.`);
       setPage(1);
       await loadSales();
@@ -175,11 +206,19 @@ export default function Sales() {
       } catch {
         // non-fatal, existing category list just won't update
       }
+      setImportModalOpen(false);
+      setImportFile(null);
+      setImportValidation(null);
+      setImportModalError('');
     } catch (err) {
-      setError(err.response?.data?.error || 'Import failed.');
+      const responseData = err.response?.data;
+      if (responseData?.failedRows) {
+        setImportValidation(responseData);
+      }
+      setImportModalError(responseData?.error || 'Import failed.');
     } finally {
+      setImportValidating(false);
       setImporting(false);
-      event.target.value = '';
     }
   };
 
@@ -447,19 +486,6 @@ export default function Sales() {
         </div>
       )}
 
-      {importSummary && importSummary.failed > 0 && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          {importSummary.failed} row(s) failed validation and were skipped. First few reasons:
-          <ul className="mt-2 list-disc pl-5">
-            {importSummary.failedRows.slice(0, 5).map((f) => (
-              <li key={f.row}>
-                Row {f.row}: {f.reasons?.join(', ')}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       <Table
         title="Sales table"
         searchValue={searchInput}
@@ -584,6 +610,67 @@ export default function Sales() {
               {savingSale ? 'Saving...' : editingSale ? 'Save changes' : 'Create sale'}
             </button>
           </form>
+        </div>
+      )}
+
+      {importModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-emerald-950/45 px-4 py-6 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-[1.5rem] border border-emerald-900/10 bg-[#fbfaf7] shadow-2xl shadow-emerald-950/25">
+            <div className="flex items-start justify-between gap-4 border-b border-emerald-900/10 p-6 sm:p-8">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-lime-700/70">Sales import</p>
+                <h2 className="mt-2 text-2xl font-semibold text-emerald-950">{importFile ? 'Validate file' : 'Upload file'}</h2>
+                {importFile && <p className="mt-2 break-all text-sm text-emerald-900/60">{importFile.name}</p>}
+              </div>
+              <button type="button" onClick={closeImportModal} disabled={importing || importValidating} className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-emerald-900/60 transition hover:bg-emerald-50 disabled:opacity-40" title="Close import dialog" aria-label="Close import dialog">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="custom-scrollbar overflow-y-auto p-6 sm:p-8">
+              {importModalError && !importValidation?.failedRows?.length && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{importModalError}</div>
+              )}
+
+              {importValidation?.failedRows?.length > 0 ? (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-900">
+                  <p className="font-semibold">Import blocked: {importValidation.failedRows.length} row(s) need attention.</p>
+                  <p className="mt-1 text-sm">No rows were imported. Fix these rows and select the file again.</p>
+                  <div className="mt-4 max-h-72 overflow-y-auto rounded-lg border border-rose-200 bg-white">
+                    {importValidation.failedRows.map((failure) => (
+                      <div key={failure.row} className="border-b border-rose-100 px-3 py-2 text-sm last:border-b-0">
+                        <span className="font-semibold">Row {failure.row}:</span> {failure.reasons?.join('; ')}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : importValidation ? (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                  <div className="flex items-center gap-2 font-semibold"><CheckCircle2 className="h-5 w-5" /> All {importValidation.totalRows} row(s) passed validation.</div>
+                  <p className="mt-1">Nothing has been imported yet. Confirm below to continue.</p>
+                </div>
+              ) : importFile ? (
+                <p className="text-sm text-emerald-900/70">The file will be checked row by row before anything is added to sales.</p>
+              ) : (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-emerald-900/20 bg-white px-6 py-12 text-center">
+                  <Upload className="h-8 w-8 text-emerald-700" />
+                  <p className="mt-4 font-semibold text-emerald-950">Choose a sales file to begin</p>
+                  <p className="mt-2 text-sm text-emerald-900/60">CSV or Excel files up to 25 MB</p>
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="mt-6 inline-flex items-center gap-2 rounded-xl bg-emerald-800 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700">
+                    <Upload className="h-4 w-4" />
+                    Select file
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 border-t border-emerald-900/10 p-6 sm:flex-row sm:justify-end sm:p-8">
+              <button type="button" onClick={closeImportModal} disabled={importing || importValidating} className="rounded-xl border border-emerald-900/10 bg-white px-4 py-3 text-sm font-medium text-emerald-900/70 transition hover:bg-emerald-50 disabled:opacity-40">Cancel</button>
+              {importFile && <button type="button" onClick={submitImport} disabled={importing || importValidating || Boolean(importValidation?.failedRows?.length)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-800 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60">
+                {importValidating ? 'Checking rows...' : importing ? 'Importing...' : importValidation ? 'Import file' : 'Validate file'}
+              </button>}
+            </div>
+          </div>
         </div>
       )}
 

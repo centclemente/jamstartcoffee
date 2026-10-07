@@ -40,11 +40,11 @@ const parseImportedDate = (rawValue) => {
     return new Date(Date.UTC(year, month - 1, day));
   }
 
-  // Common spreadsheet format MM/DD/YYYY
+  // This application's CSV exports use DD/MM/YYYY (for example, 01/06/2026 = June 1, 2026).
   const slashMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
   if (slashMatch) {
-    const month = Number(slashMatch[1]);
-    const day = Number(slashMatch[2]);
+    const day = Number(slashMatch[1]);
+    const month = Number(slashMatch[2]);
     const year = Number(slashMatch[3]);
     return new Date(Date.UTC(year, month - 1, day));
   }
@@ -61,6 +61,8 @@ const MAX_ROWS_PER_IMPORT = 50000; // sanity ceiling — prevents a bad/huge fil
 
 export const importSales = async (req, res) => {
   try {
+    const validateOnly = req.query.validateOnly === 'true';
+
     // ── File presence check ──────────────────────────────
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -76,14 +78,16 @@ export const importSales = async (req, res) => {
     // a genuinely different/updated file that happens to share a filename.
     const fileHash = crypto.createHash('sha256').update(req.file.buffer).digest('hex');
 
-    const existingImport = await prisma.importLog.findUnique({
-      where: { fileHash },
-    });
-
-    if (existingImport) {
-      return res.status(409).json({
-        error: `This exact file was already imported on ${existingImport.importedAt.toISOString().split('T')[0]} (as "${existingImport.filename}")`,
+    if (!validateOnly) {
+      const existingImport = await prisma.importLog.findUnique({
+        where: { fileHash },
       });
+
+      if (existingImport) {
+        return res.status(409).json({
+          error: `This exact file was already imported on ${existingImport.importedAt.toISOString().split('T')[0]} (as "${existingImport.filename}")`,
+        });
+      }
     }
 
     const ext = req.file.originalname.slice(req.file.originalname.lastIndexOf('.')).toLowerCase();
@@ -189,19 +193,6 @@ export const importSales = async (req, res) => {
         rowErrors.push('Total Sales cannot be negative');
       }
 
-      // Business-logic sanity check — not a hard rejection, but flag rows where
-      // reported Total Sales is wildly inconsistent with Net Price × Items Sold
-      // (helps catch typos in the client's raw data, e.g. a misplaced decimal)
-      if (rowErrors.length === 0) {
-        const expectedTotal = net_price * items_sold;
-        const tolerance = expectedTotal * 0.05; // allow 5% variance for rounding
-        if (Math.abs(expectedTotal - totalSales) > tolerance && expectedTotal > 0) {
-          rowErrors.push(
-            `Total Sales (${totalSales}) doesn't match Net Price × Items Sold (expected ~${expectedTotal.toFixed(2)})`
-          );
-        }
-      }
-
       if (rowErrors.length > 0) {
         failedRows.push({ row: rowNumber, reasons: rowErrors });
         continue;
@@ -210,19 +201,39 @@ export const importSales = async (req, res) => {
       validRows.push({ date, item_name, category, net_price, items_sold, totalSales });
     }
 
-    // ── Insert ──────────────────────────────
-    if (validRows.length > 0) {
-      await prisma.sale.createMany({ data: validRows });
+    if (failedRows.length > 0) {
+      return res.status(422).json({
+        error: 'Import blocked: fix the validation errors before importing this file.',
+        totalRows: rows.length,
+        validRows: validRows.length,
+        failed: failedRows.length,
+        failedRows,
+      });
     }
 
-    // Record this file's hash so re-uploading the exact same file gets caught next time
-    await prisma.importLog.create({
-      data: {
-        filename: req.file.originalname,
-        fileHash,
-        rowCount: validRows.length,
-        importedBy: req.user?.email || 'unknown',
-      },
+    if (validateOnly) {
+      return res.status(200).json({
+        message: 'File is valid and ready to import',
+        totalRows: rows.length,
+        validRows: validRows.length,
+        failed: 0,
+        failedRows: [],
+      });
+    }
+
+    // ── Insert ──────────────────────────────
+    await prisma.$transaction(async (transaction) => {
+      await transaction.sale.createMany({ data: validRows });
+
+      // Record this file's hash so re-uploading the exact same file gets caught next time
+      await transaction.importLog.create({
+        data: {
+          filename: req.file.originalname,
+          fileHash,
+          rowCount: validRows.length,
+          importedBy: req.user?.email || 'unknown',
+        },
+      });
     });
 
     queueActivity(res, {
@@ -235,7 +246,7 @@ export const importSales = async (req, res) => {
       totalRows: rows.length,
       inserted: validRows.length,
       failed: failedRows.length,
-      failedRows: failedRows.slice(0, 50), // cap response size for very messy files
+      failedRows,
     });
   } catch (error) {
     console.error('Import error:', error);

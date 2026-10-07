@@ -67,31 +67,55 @@ function ValueTooltip({ active, payload, label, target }) {
   );
 }
 
-// Combines a model's history + forecast into one array Recharts can plot,
-// with "actualValue" (solid line) transitioning into "predictedValue"
-// (dashed line). Picks actualRevenue vs actualUnits from history depending
-// on what this model's forecast scale actually represents -- plotting the
-// wrong one is what made the actual line look flat before. Bridges the gap
-// by carrying the last actual value into the first forecast point, so the
-// two lines connect instead of leaving a visible break between them.
-function buildChartSeries(history, forecast, target, historyWindow = 6) {
+// Keeps all imported history visible and overlays each completed month's
+// out-of-sample prediction when the backend has one. Future forecast rows are
+// appended after the latest actual month.
+function buildChartSeries(history, forecast, comparison, target, historyRange = 6) {
   const historyField = target === 'revenue' ? 'actualRevenue' : 'actualUnits';
-  const recentHistory = (history ?? []).slice(-historyWindow);
-  const historyRows = recentHistory.map((h) => ({
+  const predictionsByMonth = new Map(
+    (comparison ?? []).map((row) => [row.month, row.predictedValue]),
+  );
+  const visibleHistory = historyRange === 'all'
+    ? (history ?? [])
+    : (history ?? []).slice(-historyRange);
+  const historyRows = visibleHistory.map((h) => ({
     month: h.month,
     actualValue: h[historyField],
-    predictedValue: null,
+    predictedValue: predictionsByMonth.get(h.month) ?? null,
   }));
-  if (historyRows.length) {
-    historyRows[historyRows.length - 1].predictedValue =
-      historyRows[historyRows.length - 1].actualValue;
-  }
   const forecastRows = (forecast ?? []).map((f) => ({
     month: f.month,
     actualValue: null,
     predictedValue: f.predictedValue,
   }));
   return [...historyRows, ...forecastRows];
+}
+
+function GraphRangeControl({ value, onChange }) {
+  const options = [
+    { value: 'all', label: 'All time' },
+    { value: 3, label: '3 months' },
+    { value: 6, label: '6 months' },
+    { value: 12, label: '12 months' },
+  ];
+
+  return (
+    <div className="flex items-center gap-1 rounded-xl border border-emerald-900/10 bg-[#fbfaf7] p-1">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          onClick={() => onChange(option.value)}
+          className={`rounded-lg px-2.5 py-1.5 text-xs font-medium transition ${
+            value === option.value
+              ? 'bg-emerald-950 text-white'
+              : 'text-emerald-900/60 hover:bg-emerald-50'
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function ForecastChart({ chartData, target }) {
@@ -184,6 +208,45 @@ function ForecastTable({ forecastKey, forecast, expanded, onToggle, target }) {
   );
 }
 
+function ComparisonTable({ comparison, target }) {
+  if (!comparison?.length) return null;
+  const fmt = (n) => formatValue(n, target);
+  return (
+    <div className="mt-6 border-t border-emerald-900/10 pt-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-950">
+          Actual vs predicted
+        </h3>
+        <span className="text-xs text-emerald-900/50">Completed months only</span>
+      </div>
+      <div className="mt-3 overflow-x-auto">
+        <table className="w-full min-w-[620px] border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-emerald-900/10 text-left text-xs uppercase tracking-[0.16em] text-lime-700/60">
+              <th className="py-2 pr-4">Month</th>
+              <th className="px-3 py-2 text-right">Actual</th>
+              <th className="px-3 py-2 text-right">Predicted</th>
+              <th className="px-3 py-2 text-right">Accuracy</th>
+            </tr>
+          </thead>
+          <tbody>
+            {comparison.map((row) => (
+              <tr key={row.month} className="border-b border-emerald-900/5">
+                <td className="py-2 pr-4 font-medium text-emerald-950">{row.month}</td>
+                <td className="px-3 py-2 text-right text-emerald-900/75">{fmt(row.actualValue)}</td>
+                <td className="px-3 py-2 text-right text-emerald-900/75">{fmt(row.predictedValue)}</td>
+                <td className="px-3 py-2 text-right text-emerald-900/75">
+                  {row.accuracyPct == null ? '—' : `${row.accuracyPct.toFixed(1)}%`}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function CategoryContributionTable({ contribution, target }) {
   const months = contribution || [];
   const categories = [...new Set(months.flatMap((month) => (month.categories || []).map((item) => item.category)))];
@@ -232,6 +295,7 @@ export default function Forecasts() {
   const [pretrainedLoading, setPretrainedLoading] = useState({});
   const [pretrainedError, setPretrainedError] = useState({});
   const [expandedTables, setExpandedTables] = useState({});
+  const [graphHistoryRange, setGraphHistoryRange] = useState(6);
   const [pretrainedMonthsAhead, setPretrainedMonthsAhead] = useState(
     () => Object.fromEntries(PRETRAINED_MODELS.map((m) => [m.key, 3]))
   );
@@ -283,8 +347,14 @@ export default function Forecasts() {
   const salesTarget = salesData?.target ?? 'units';
 
   const salesChartData = useMemo(
-    () => buildChartSeries(salesData?.history, salesData?.forecast, salesTarget),
-    [salesData, salesTarget]
+    () => buildChartSeries(
+      salesData?.history,
+      salesData?.forecast,
+      salesData?.comparison,
+      salesTarget,
+      graphHistoryRange,
+    ),
+    [salesData, salesTarget, graphHistoryRange]
   );
 
   // --- Demand forecast -- secondary panel ---
@@ -317,6 +387,7 @@ export default function Forecasts() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <GraphRangeControl value={graphHistoryRange} onChange={setGraphHistoryRange} />
               <div className="flex items-center gap-1 rounded-xl border border-emerald-900/10 bg-[#fbfaf7] p-1">
                 {MONTH_OPTIONS.map((m) => (
                   <button
@@ -370,6 +441,7 @@ export default function Forecasts() {
                 onToggle={toggleTable}
                 target={salesTarget}
               />
+              <ComparisonTable comparison={salesData.comparison} target={salesTarget} />
               <CategoryContributionTable contribution={salesData.category_contribution} target={salesTarget} />
             </>
           )}
@@ -385,7 +457,13 @@ export default function Forecasts() {
           const months = pretrainedMonthsAhead[key];
 
           const target = data?.target ?? 'units';
-          const chartData = buildChartSeries(data?.history, data?.forecast, target);
+          const chartData = buildChartSeries(
+            data?.history,
+            data?.forecast,
+            data?.comparison,
+            target,
+            graphHistoryRange,
+          );
 
           const totalValue = (data?.forecast ?? []).reduce(
             (sum, f) => sum + (f.predictedValue ?? 0),
@@ -409,6 +487,7 @@ export default function Forecasts() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <GraphRangeControl value={graphHistoryRange} onChange={setGraphHistoryRange} />
                   <div className="flex items-center gap-1 rounded-xl border border-emerald-900/10 bg-[#fbfaf7] p-1">
                     {MONTH_OPTIONS.map((m) => (
                       <button
@@ -469,6 +548,7 @@ export default function Forecasts() {
                     onToggle={toggleTable}
                     target={target}
                   />
+                  <ComparisonTable comparison={data?.comparison} target={target} />
                   <CategoryContributionTable contribution={data.category_contribution} target={target} />
                 </>
               )}

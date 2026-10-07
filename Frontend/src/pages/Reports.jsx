@@ -646,7 +646,7 @@ function makeTemplatePdf(report, subtitle) {
     forecastRows.map((row) => ({
       month: row.month,
       sales: peso(row.predictedValue),
-      percentage: "100%",
+      percentage: "Pending actuals",
     })),
   );
   subTitle("4.2 Demand Forecast â€” By Month");
@@ -659,7 +659,7 @@ function makeTemplatePdf(report, subtitle) {
     forecastRows.map((row) => ({
       month: row.month,
       units: num(row.predictedUnits),
-      percentage: "100%",
+      percentage: "Pending actuals",
     })),
   );
   contributionSection("Part 5: Category Contribution — Sales", report.salesContribution, "revenue", report.salesInsight);
@@ -1190,4 +1190,3 @@ export default function Reports() {
     </section>
   );
 }
-
