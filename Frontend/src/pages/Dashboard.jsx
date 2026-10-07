@@ -575,7 +575,7 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6">
         <SectionCard
           title="Monthly sales trend"
           action={
