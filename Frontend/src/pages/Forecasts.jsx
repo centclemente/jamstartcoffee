@@ -18,7 +18,11 @@ import {
   RefreshCw,
 } from 'lucide-react';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const API_BASE = import.meta.env.VITE_API_URL;
+
+if (!API_BASE) {
+  throw new Error('VITE_API_URL is not configured. Set it to the deployed backend API URL.');
+}
 
 const MONTH_OPTIONS = [3, 6, 12];
 
