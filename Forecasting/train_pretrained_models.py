@@ -2,7 +2,8 @@
 
 This intentionally fits on every available month. The 80/20 models in the
 notebooks are evaluation-only models and must not be deployed as pretrained
-forecast artifacts.
+forecast artifacts. Run this with the same Python dependencies listed in
+requirements.txt as the deployed forecasting service.
 """
 
 from __future__ import annotations
