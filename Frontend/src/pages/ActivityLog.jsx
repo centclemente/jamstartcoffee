@@ -5,6 +5,10 @@ import { fetchActivityLogs } from '../api/activity';
 import Table from '../components/Table';
 
 const pageSize = 20;
+const requestPageSize = 100;
+const technicalActionPattern = /^(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\s+\/api(?:\/|\b)/i;
+
+const isUserAction = (log) => !technicalActionPattern.test(String(log.action || '').trim());
 
 const formatTimestamp = (value) =>
   new Intl.DateTimeFormat('en', {
@@ -42,15 +46,26 @@ export default function ActivityLog() {
       setError('');
 
       try {
-        const response = await fetchActivityLogs(page, pageSize, searchTerm);
+        const firstResponse = await fetchActivityLogs(1, requestPageSize, searchTerm);
+        const responses = [firstResponse];
+
+        for (let nextPage = 2; nextPage <= (firstResponse.totalPages || 1); nextPage += 1) {
+          responses.push(await fetchActivityLogs(nextPage, requestPageSize, searchTerm));
+        }
+
+        const userActions = responses
+          .flatMap((response) => response.logs || [])
+          .filter(isUserAction);
+        const filteredTotalPages = Math.max(1, Math.ceil(userActions.length / pageSize));
+        const pageStart = (page - 1) * pageSize;
 
         if (!active || requestId !== requestRef.current) {
           return;
         }
 
-        setLogs(response.logs || []);
-        setTotalPages(response.totalPages || 1);
-        setTotalLogs(response.totalLogs || 0);
+        setLogs(userActions.slice(pageStart, pageStart + pageSize));
+        setTotalPages(filteredTotalPages);
+        setTotalLogs(userActions.length);
       } catch {
         if (!active || requestId !== requestRef.current) {
           return;
