@@ -43,18 +43,20 @@ MIN_MONTHS_REQUIRED = 6  # Prophet/ARIMA/SARIMA need a reasonable history to be 
 # PRE-TRAINED HOLT-WINTERS MODELS (client-supplied)
 # ---------------------------------------------------------------------------
 # These are already-fitted statsmodels ExponentialSmoothing results. They are
-# loaded once and forecast from their own training index. The public keys stay
-# "sarima" and "demand" for API compatibility with existing clients.
+# loaded once and forecast from their own training index. The "sarima" key is
+# retained as a compatibility alias for the existing sales forecast client.
 MODEL_DIR = Path(__file__).parent / "model"
 
 PRETRAINED_MODEL_META = {
     "sarima": {
         "file": MODEL_DIR / "sales_holtwinters_model.pkl",
         "target": "revenue",
+        "model_type": "holt_winters",
     },
     "demand": {
         "file": MODEL_DIR / "demand_holtwinters_model.pkl",
         "target": "units",
+        "model_type": "holt_winters",
     },
 }
 
@@ -89,6 +91,15 @@ def _last_model_month(model) -> pd.Timestamp:
     raise ValueError("The Holt-Winters model does not contain a usable training date index.")
 
 
+def _model_training_start(model) -> pd.Timestamp:
+    """Read the first fitted month from a statsmodels results object's index."""
+    data = getattr(getattr(model, "model", None), "data", None)
+    index = getattr(data, "row_labels", None)
+    if index is None or not len(index):
+        raise ValueError("The Holt-Winters model does not contain a training date index.")
+    return pd.Timestamp(index[0]).to_period("M").to_timestamp()
+
+
 def _holt_winters_prediction_intervals(model, predicted: np.ndarray) -> np.ndarray:
     """Build approximate 95% intervals from the fitted residual variation."""
     residuals = np.asarray(getattr(model, "resid", []), dtype=float)
@@ -107,8 +118,8 @@ def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6
     solid line and the forecast as a dashed/broken line continuing from it
     -- same pattern as /forecast/sales.
 
-    IMPORTANT: the model is frozen at meta["last_trained_month"] and always
-    predicts sequentially from there. The forecast should pick up right
+    The model is frozen at its embedded training cutoff and always predicts
+    sequentially from there. The forecast should pick up right
     after the last actual month you've imported (fetch_last_actual_month()),
     NOT from today's calendar date and NOT from the model's own training
     cutoff -- those are almost never the same month. We predict far enough
@@ -117,6 +128,7 @@ def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6
     """
     model = load_pretrained_model(key)
     meta = PRETRAINED_MODEL_META[key]
+    training_start = _model_training_start(model)
     last_known_date = _last_model_month(model)
 
     last_actual_month = fetch_last_actual_month()
@@ -153,7 +165,7 @@ def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6
             + (actual_date.month - last_known_date.month)
             - 1
         )
-        # The model was trained through last_trained_month, so only compare
+        # The model was trained through last_known_date, so only compare
         # predictions for later completed months. Never score in-sample data.
         if prediction_index < 0 or prediction_index >= elapsed_months:
             continue
@@ -218,6 +230,12 @@ def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6
             if evaluated_errors else None,
             "mape": round(float(np.mean(evaluated_percentage_errors)), 2)
             if evaluated_percentage_errors else None,
+        },
+        "model": {
+            "type": meta["model_type"],
+            "trainingStart": training_start.strftime("%Y-%m"),
+            "trainingEnd": last_known_date.strftime("%Y-%m"),
+            "forecastStart": forecast[0]["month"] if forecast else None,
         },
         "category_contribution": category_contribution,
         "category_insight": category_insight,
@@ -607,7 +625,11 @@ def run_backtest(df: pd.DataFrame, holdout_months: int) -> dict:
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "time": datetime.utcnow().isoformat(), "version": "v7-prophet-arima-sarima-pretrained"}
+    return {
+        "status": "ok",
+        "time": datetime.utcnow().isoformat(),
+        "version": "v8-holt-winters-pretrained",
+    }
 
 
 @app.get("/forecast/sales")
@@ -785,6 +807,7 @@ def forecast_pretrained(
     return {
         "key": key,
         "target": PRETRAINED_MODEL_META[key]["target"],
+        "model": result["model"],
         "monthsAhead": months_ahead,
         "historyMonths": history_months,
         "history": result["history"],
