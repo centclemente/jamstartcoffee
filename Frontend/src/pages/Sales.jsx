@@ -160,13 +160,14 @@ export default function Sales() {
   const [exporting, setExporting] = useState(false);
   const [saleFormOpen, setSaleFormOpen] = useState(false);
   const [editingSale, setEditingSale] = useState(null);
-  const [saleForm, setSaleForm] = useState(emptySale);
+  const [saleForms, setSaleForms] = useState([emptySale]);
   const [savingSale, setSavingSale] = useState(false);
   const [saleFormError, setSaleFormError] = useState('');
   const [pendingArchive, setPendingArchive] = useState(null);
   const [selectedSaleIds, setSelectedSaleIds] = useState([]);
-  const [itemSearch, setItemSearch] = useState('');
-  const [itemPickerOpen, setItemPickerOpen] = useState(false);
+  const [itemSearches, setItemSearches] = useState(['']);
+  const [itemPickerIndex, setItemPickerIndex] = useState(null);
+  const [itemPickerPosition, setItemPickerPosition] = useState(null);
   const fileInputRef = useRef(null);
   const latestRequestRef = useRef(0);
 
@@ -424,11 +425,12 @@ export default function Sales() {
 
   const openCreateSale = () => {
     setEditingSale(null);
-    setSaleForm({ ...emptySale, date: new Date().toISOString().slice(0, 10) });
+    setSaleForms([{ ...emptySale, date: new Date().toISOString().slice(0, 10) }]);
     setSaleFormOpen(true);
     setSaleFormError('');
-    setItemSearch('');
-    setItemPickerOpen(false);
+    setItemSearches(['']);
+    setItemPickerIndex(null);
+    setItemPickerPosition(null);
     setError('');
   };
 
@@ -449,24 +451,26 @@ export default function Sales() {
 
   const openEditSale = (sale) => {
     setEditingSale(sale);
-    setSaleForm({
+    setSaleForms([{
       date: sale.month,
       item_name: sale.item_name,
       category: sale.category,
       net_price: sale.net_price,
       items_sold: sale.items_sold,
       totalSales: sale.totalSales,
-    });
+    }]);
     setSaleFormOpen(true);
     setSaleFormError('');
-    setItemSearch(sale.item_name);
-    setItemPickerOpen(false);
+    setItemSearches([sale.item_name]);
+    setItemPickerIndex(null);
+    setItemPickerPosition(null);
     setError('');
   };
 
-  const handleSaleFormChange = (event) => {
+  const handleSaleFormChange = (event, formIndex = 0) => {
     const { name, value } = event.target;
-    setSaleForm((current) => {
+    setSaleForms((forms) => forms.map((current, index) => {
+      if (index !== formIndex) return current;
       const next = { ...current, [name]: value };
       if (name === 'item_name') {
         const selectedItem = itemOptions.find((item) => item.item_name === value)
@@ -486,12 +490,11 @@ export default function Sales() {
         next.totalSales = Number.isFinite(price) && Number.isFinite(units) ? (price * units).toFixed(2) : '';
       }
       return next;
-    });
+    }));
   };
 
-  const handleItemSelect = (item) => {
-    const units = Number(saleForm.items_sold);
-    setSaleForm((current) => ({
+  const handleItemSelect = (item, formIndex = 0) => {
+    setSaleForms((forms) => forms.map((current, index) => index === formIndex ? ({
       ...current,
       item_name: item.item_name,
       category: item.category || '',
@@ -499,9 +502,9 @@ export default function Sales() {
       totalSales: current.items_sold !== '' && Number.isFinite(units)
         ? (Number(item.net_price) * units).toFixed(2)
         : '',
-    }));
-    setItemSearch(item.item_name);
-    setItemPickerOpen(false);
+    }) : current));
+    setItemSearches((searches) => searches.map((search, index) => index === formIndex ? item.item_name : search));
+    setItemPickerIndex(null);
   };
 
   const handleSaveSale = async (event) => {
@@ -510,9 +513,12 @@ export default function Sales() {
     setError('');
     setSaleFormError('');
     try {
-      const path = editingSale ? `/sales/${editingSale.id}` : '/sales';
-      const response = editingSale ? await api.put(path, saleForm) : await api.post(path, saleForm);
-      setSuccess(editingSale ? 'Sale record updated.' : 'Sale record created.');
+      const requests = editingSale
+        ? [api.put(`/sales/${editingSale.id}`, saleForms[0])]
+        : saleForms.map((form) => api.post('/sales', form));
+      const responses = await Promise.all(requests);
+      const response = responses[0];
+      setSuccess(editingSale ? 'Sale record updated.' : `${saleForms.length} sale record${saleForms.length === 1 ? '' : 's'} created.`);
       setSaleFormOpen(false);
       setEditingSale(null);
       await loadSales();
@@ -810,15 +816,17 @@ export default function Sales() {
 
       {saleFormOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-emerald-950/45 px-4 py-6 backdrop-blur-sm">
-          <form onSubmit={handleSaveSale} className="w-full max-w-4xl rounded-[1.5rem] border border-emerald-900/10 bg-[#fbfaf7] p-6 shadow-2xl shadow-emerald-950/25 sm:p-10">
-            <div className="flex items-start justify-between gap-4">
+          <form onSubmit={handleSaveSale} className="flex max-h-[90vh] w-full max-w-[89rem] flex-col rounded-[1.5rem] border border-emerald-900/10 bg-[#fbfaf7] p-6 shadow-2xl shadow-emerald-950/25 sm:p-8">
+            <div className="flex shrink-0 items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-lime-700/70">Sales record</p>
                 <h2 className="mt-2 text-2xl font-semibold text-emerald-950">{editingSale ? 'Edit sale' : 'Add sale'}</h2>
               </div>
               <button type="button" onClick={() => setSaleFormOpen(false)} className="rounded-xl border border-emerald-900/10 bg-white px-3 py-2 text-sm text-emerald-900/60">Cancel</button>
             </div>
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="custom-scrollbar mt-6 min-h-0 overflow-x-auto overflow-y-auto pr-2">
+            {saleForms.map((currentForm, formIndex) => (
+            <div key={formIndex} className="grid min-w-[82rem] grid-cols-[9rem_18rem_14rem_11rem_10rem_12rem_9rem] items-end gap-3 border-b border-emerald-900/10 py-3 first:border-t">
               {[
                 ['date', 'Date', 'date'],
                 ['item_name', 'Item name', 'text'],
@@ -827,23 +835,31 @@ export default function Sales() {
                 ['items_sold', 'Items sold', 'number'],
                 ['totalSales', 'Total sales', 'number'],
               ].map(([name, label, type]) => (
-                <label key={name} className="grid gap-2 text-sm font-medium text-emerald-900/75">
+                <label key={name} className="grid min-w-0 gap-2 text-sm font-medium text-emerald-900/75">
                   {label}
                   {name === 'item_name' ? (
                     <div className="relative">
                       <div className="flex items-center rounded-xl border border-emerald-900/10 bg-white px-3 py-2.5 focus-within:border-emerald-700/40 focus-within:ring-2 focus-within:ring-emerald-700/10">
                         <Search className="mr-2 h-4 w-4 shrink-0 text-emerald-900/40" />
                         <input
-                          value={itemSearch}
+                          value={itemSearches[formIndex] || ''}
                           onChange={(event) => {
-                            setItemSearch(event.target.value);
-                            setItemPickerOpen(true);
-                            if (!event.target.value) handleSaleFormChange({ target: { name, value: '' } });
+                            setItemSearches((searches) => searches.map((search, index) => index === formIndex ? event.target.value : search));
+                            setItemPickerIndex(formIndex);
+                            if (!event.target.value) handleSaleFormChange({ target: { name, value: '' } }, formIndex);
                           }}
-                          onFocus={() => setItemPickerOpen(true)}
+                          onFocus={(event) => {
+                            const bounds = event.currentTarget.getBoundingClientRect();
+                            setItemPickerPosition({
+                              top: bounds.bottom + 8,
+                              left: bounds.left,
+                              width: bounds.width,
+                            });
+                            setItemPickerIndex(formIndex);
+                          }}
                           placeholder="Search and select an item"
-                          required={!saleForm.item_name}
-                          className="w-full bg-transparent text-sm text-emerald-950 outline-none placeholder:text-emerald-900/40"
+                          required={!currentForm.item_name}
+                          className="w-full min-w-0 bg-transparent text-sm text-emerald-950 outline-none placeholder:text-emerald-900/40"
                         />
                       </div>
                       {saleFormError && (
@@ -851,18 +867,19 @@ export default function Sales() {
                           {saleFormError}
                         </div>
                       )}
-                      {itemPickerOpen && (
-                        <div className="absolute z-20 mt-2 max-h-56 w-full overflow-y-auto rounded-xl border border-emerald-900/10 bg-white p-1 shadow-xl">
+                      {itemPickerIndex === formIndex && (
+                        <div
+                          className="fixed z-[70] max-h-56 overflow-y-auto rounded-xl border border-emerald-900/10 bg-white p-1 shadow-xl"
+                          style={itemPickerPosition || undefined}
+                        >
                           {itemOptions
-                            .filter((item) => item.item_name.toLowerCase().includes(itemSearch.toLowerCase()))
+                            .filter((item) => item.item_name.toLowerCase().includes((itemSearches[formIndex] || '').toLowerCase()))
                             .map((item) => (
                               <button
                                 key={item.item_name}
                                 type="button"
                                 onClick={() => {
-                                  setItemSearch(item.item_name);
-                                  setItemPickerOpen(false);
-                                  handleItemSelect(item);
+                                  handleItemSelect(item, formIndex);
                                 }}
                                 className="block w-full rounded-lg px-3 py-2 text-left text-sm text-emerald-950 hover:bg-emerald-50"
                               >
@@ -871,17 +888,17 @@ export default function Sales() {
                             ))}
                         </div>
                       )}
-                      <input type="hidden" name={name} value={saleForm[name]} required />
+                      <input type="hidden" name={name} value={currentForm[name]} required />
                     </div>
                   ) : name === 'category' ? (
                     <input
                       name={name}
-                      value={saleForm[name]}
+                      value={currentForm[name]}
                       readOnly
-                      disabled={!editingSale || Boolean(saleForm.item_name)}
+                      disabled={!editingSale || Boolean(currentForm.item_name)}
                       required
                       placeholder="Auto-filled from item"
-                      className="rounded-xl border border-emerald-900/10 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-950 outline-none"
+                      className="w-full rounded-xl border border-emerald-900/10 bg-emerald-50 px-3 py-2.5 text-sm text-emerald-950 outline-none"
                     />
                   ) : (
                     <input
@@ -889,17 +906,45 @@ export default function Sales() {
                       type={type}
                       min={type === 'number' ? '0' : undefined}
                       step={name === 'items_sold' ? '1' : '0.01'}
-                      value={saleForm[name]}
-                      onChange={handleSaleFormChange}
+                      value={currentForm[name]}
+                      onChange={(event) => handleSaleFormChange(event, formIndex)}
                       readOnly={name === 'totalSales' || name === 'net_price'}
                       disabled={name === 'net_price' || name === 'totalSales'}
                       required
-                      className="rounded-xl border border-emerald-900/10 bg-white px-3 py-2.5 text-sm text-emerald-950 outline-none focus:border-emerald-700/40 focus:ring-2 focus:ring-emerald-700/10 read-only:bg-emerald-50"
+                      className="w-full rounded-xl border border-emerald-900/10 bg-white px-3 py-2.5 text-sm text-emerald-950 outline-none focus:border-emerald-700/40 focus:ring-2 focus:ring-emerald-700/10 read-only:bg-emerald-50"
                     />
                   )}
                 </label>
               ))}
+              {!editingSale && saleForms.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSaleForms((forms) => forms.filter((_, index) => index !== formIndex));
+                    setItemSearches((searches) => searches.filter((_, index) => index !== formIndex));
+                  }}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-rose-700 transition hover:bg-rose-50 hover:text-rose-800"
+                  title="Remove this sale"
+                  aria-label="Remove this sale"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
             </div>
+            ))}
+            </div>
+            {!editingSale && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSaleForms((forms) => [...forms, { ...emptySale, date: new Date().toISOString().slice(0, 10) }]);
+                  setItemSearches((searches) => [...searches, '']);
+                }}
+                className="mt-4 inline-flex items-center justify-center rounded-xl border border-emerald-900/10 bg-white px-4 py-2.5 text-sm font-medium text-emerald-800 transition hover:bg-emerald-50"
+              >
+                + Add more sale
+              </button>
+            )}
             <button type="submit" disabled={savingSale} className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60">
               {savingSale ? 'Saving...' : editingSale ? 'Save changes' : 'Create sale'}
             </button>
