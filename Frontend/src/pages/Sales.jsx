@@ -17,10 +17,116 @@ const pageSizeOptions = [
 const formatMonth = (value) =>
   new Intl.DateTimeFormat('en', { year: 'numeric', month: 'long' }).format(new Date(value));
 
+const salesYears = Array.from(
+  { length: new Date().getFullYear() - 2019 },
+  (_, index) => new Date().getFullYear() - index,
+);
+const salesMonths = Array.from({ length: 12 }, (_, index) => ({
+  value: String(index + 1).padStart(2, '0'),
+  label: new Intl.DateTimeFormat('en-US', { month: 'short' }).format(new Date(2024, index, 1)),
+}));
+const periodParams = ({ years, months }) => {
+  const params = {};
+  if (years.length === 1 && months.length === 1) {
+    params.month = `${years[0]}-${months[0]}`;
+    return params;
+  }
+  if (years.length === 1 && !months.length) {
+    params.startDate = `${years[0]}-01-01T00:00:00.000Z`;
+    params.endDate = `${years[0]}-12-31T23:59:59.999Z`;
+    return params;
+  }
+  if (years.length) params.years = years.join(',');
+  if (months.length) params.months = months.join(',');
+  return params;
+};
+const formatPeriod = ({ years, months }) => {
+  if (!years.length && !months.length) return 'All time';
+  if (years.length && months.length) return `${years.length} years, ${months.length} months`;
+  if (years.length) return years.join(', ');
+  return months.map((month) => salesMonths.find((option) => option.value === month)?.label).join(', ');
+};
+const matchesPeriod = (sale, period) => {
+  if (!period.years.length && !period.months.length) return true;
+  const [year, month] = String(sale.month || '').slice(0, 7).split('-');
+  return (!period.years.length || period.years.includes(Number(year)))
+    && (!period.months.length || period.months.includes(month));
+};
 const formatCurrency = (value) =>
-  new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(Number(value) || 0);
+  new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP', maximumFractionDigits: 0 }).format(Number(value) || 0);
 
 const emptySale = { date: '', item_name: '', category: '', net_price: '', items_sold: '', totalSales: '' };
+
+function SalesPeriodPicker({ value, onChange }) {
+  const toggle = (key, item) => {
+    const selected = value[key].includes(item);
+    onChange({
+      ...value,
+      [key]: selected ? value[key].filter((entry) => entry !== item) : [...value[key], item],
+    });
+  };
+
+  return (
+    <details className="relative">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-2xl border border-emerald-900/10 bg-white px-3 py-3 text-sm text-emerald-950 shadow-sm shadow-emerald-950/5">
+        <Calendar className="h-4 w-4 shrink-0 text-emerald-900/45" />
+        <span>{formatPeriod(value)}</span>
+      </summary>
+      <div className="absolute right-0 z-30 mt-2 w-[19rem] rounded-2xl border border-emerald-900/10 bg-white p-3 shadow-xl shadow-emerald-950/15">
+        <button
+          type="button"
+          onClick={() => onChange({ years: [], months: [] })}
+          className={`mb-3 w-full rounded-xl px-3 py-2 text-left text-sm ${
+            !value.years.length && !value.months.length ? 'bg-emerald-700 font-semibold text-white' : 'text-emerald-950 hover:bg-emerald-50'
+          }`}
+        >
+          All time
+        </button>
+        <div className="mb-2 flex items-center justify-between text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-emerald-900/50">
+          <span>Year</span>
+          <span>{value.years.length ? `${value.years.length} selected` : 'Any year'}</span>
+        </div>
+        <div className="grid max-h-28 grid-cols-4 gap-1.5 overflow-y-auto">
+          {salesYears.map((year) => (
+            <button
+              key={year}
+              type="button"
+              onClick={() => toggle('years', year)}
+              className={`rounded-lg px-2 py-1.5 text-xs ${
+                value.years.includes(year)
+                  ? 'bg-emerald-700 font-semibold text-white'
+                  : 'text-emerald-950 hover:bg-emerald-50'
+              }`}
+            >
+              {year}
+            </button>
+          ))}
+        </div>
+        <div className="mb-2 mt-4 text-[0.65rem] font-semibold uppercase tracking-[0.2em] text-emerald-900/50">
+          Month
+        </div>
+        <div className="grid grid-cols-4 gap-1.5">
+          {salesMonths.map((monthOption) => {
+            return (
+              <button
+                key={monthOption.value}
+                type="button"
+                onClick={() => toggle('months', monthOption.value)}
+                className={`rounded-lg px-2 py-1.5 text-xs ${
+                  value.months.includes(monthOption.value)
+                    ? 'bg-lime-100 font-semibold text-emerald-950'
+                    : 'text-emerald-950 hover:bg-emerald-50'
+                }`}
+              >
+                {monthOption.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </details>
+  );
+}
 
 export default function Sales() {
   const { user } = useAuth();
@@ -36,7 +142,8 @@ export default function Sales() {
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [category, setCategory] = useState('all');
-  const [month, setMonth] = useState('');
+  const [period, setPeriod] = useState({ years: [], months: [] });
+  const [filteredTotals, setFilteredTotals] = useState({ totalGrossSales: 0, unitsSold: 0 });
   const [showArchived, setShowArchived] = useState(false);
 
   const [page, setPage] = useState(1);
@@ -62,7 +169,6 @@ export default function Sales() {
   const [itemPickerOpen, setItemPickerOpen] = useState(false);
   const fileInputRef = useRef(null);
   const latestRequestRef = useRef(0);
-  const activeCategoryLabel = categoryOptions.find((option) => option.value === category)?.label || category;
 
   // Pull the actual categories that exist in the database, once on mount —
   // so this list always reflects real data instead of a hardcoded guess
@@ -104,7 +210,7 @@ export default function Sales() {
 
   useEffect(() => {
     setPage(1);
-  }, [category, month, limit]);
+  }, [category, period, limit]);
 
   const loadSales = useCallback(async () => {
     const requestId = ++latestRequestRef.current;
@@ -116,16 +222,33 @@ export default function Sales() {
 
       if (searchTerm) params.item = searchTerm;
       if (category !== 'all') params.category = category;
-      if (month) params.month = month;
+      Object.assign(params, periodParams(period));
 
       const response = await api.get('/sales/table', { params });
 
       if (requestId !== latestRequestRef.current) return;
 
-      setSales(response.data.sales || []);
+      let filteredSales = (response.data.sales || []).filter((sale) => matchesPeriod(sale, period));
+      let aggregateSales = filteredSales;
+      const hasPeriodFilter = period.years.length > 0 || period.months.length > 0;
+      if (hasPeriodFilter && response.data.totalRows > (response.data.sales || []).length) {
+        const aggregatePageCount = Math.ceil(response.data.totalRows / 200);
+        const aggregateResponses = await Promise.all(
+          Array.from({ length: aggregatePageCount }, (_, index) => index + 1)
+            .map((pageNumber) => api.get('/sales/table', {
+              params: { ...params, page: pageNumber, limit: 200 },
+            })),
+        );
+        aggregateSales = aggregateResponses
+          .flatMap((pageResponse) => pageResponse.data.sales || [])
+          .filter((sale) => matchesPeriod(sale, period));
+        filteredSales = aggregateSales.slice((page - 1) * limit, page * limit);
+      }
+
+      setSales(filteredSales);
       setItemOptions((current) => {
         const byName = new Map(current.map((item) => [item.item_name, item]));
-        (response.data.sales || []).forEach((sale) => {
+        filteredSales.forEach((sale) => {
           if (!byName.has(sale.item_name) || !byName.get(sale.item_name).category) {
             byName.set(sale.item_name, {
               item_name: sale.item_name,
@@ -136,8 +259,36 @@ export default function Sales() {
         });
         return [...byName.values()];
       });
-      setTotalPages(response.data.totalPages || 1);
-      setTotalRows(response.data.totalRows || 0);
+      setTotalPages(hasPeriodFilter ? Math.max(1, Math.ceil(aggregateSales.length / limit)) : (response.data.totalPages || 1));
+      setTotalRows(hasPeriodFilter ? aggregateSales.length : (response.data.totalRows || 0));
+      const responseTotals = response.data.totals || {};
+      let fallbackTotals = {
+        totalGrossSales: aggregateSales.reduce((sum, sale) => sum + Number(sale.totalSales || 0), 0),
+        unitsSold: aggregateSales.reduce((sum, sale) => sum + Number(sale.items_sold || 0), 0),
+      };
+      if (!Object.keys(response.data.totals || {}).length && !hasPeriodFilter && response.data.totalRows > response.data.sales?.length) {
+        const aggregatePageCount = Math.ceil(response.data.totalRows / 200);
+        const aggregateResponses = await Promise.all([
+          api.get('/sales/table', { params: { ...params, page: 1, limit: 200 } }),
+          ...Array.from({ length: aggregatePageCount - 1 }, (_, index) => index + 2)
+            .map((pageNumber) => api.get('/sales/table', { params: { ...params, page: pageNumber, limit: 200 } })),
+        ]);
+        const allSales = [
+          ...aggregateResponses.flatMap((pageResponse) => pageResponse.data.sales || []),
+        ];
+        fallbackTotals = {
+          totalGrossSales: allSales.reduce((sum, sale) => sum + Number(sale.totalSales || 0), 0),
+          unitsSold: allSales.reduce((sum, sale) => sum + Number(sale.items_sold || 0), 0),
+        };
+      }
+      setFilteredTotals({
+        totalGrossSales: hasPeriodFilter
+          ? fallbackTotals.totalGrossSales
+          : Number(responseTotals.totalGrossSales ?? responseTotals.totalNetSales ?? fallbackTotals.totalGrossSales),
+        unitsSold: hasPeriodFilter
+          ? fallbackTotals.unitsSold
+          : Number(responseTotals.unitsSold ?? fallbackTotals.unitsSold),
+      });
     } catch (err) {
       if (requestId !== latestRequestRef.current) return;
 
@@ -148,7 +299,7 @@ export default function Sales() {
 
       setLoading(false);
     }
-  }, [page, limit, searchTerm, category, month, showArchived]);
+  }, [page, limit, searchTerm, category, period, showArchived]);
 
   useEffect(() => {
     loadSales();
@@ -248,7 +399,7 @@ export default function Sales() {
     try {
       const params = { format };
       if (category !== 'all') params.category = category;
-      if (month) params.month = month;
+      Object.assign(params, periodParams(period));
 
       const response = await api.get('/sales/export', {
         params,
@@ -503,7 +654,7 @@ export default function Sales() {
               className="hidden"
               onChange={handleFileSelected}
             />
-            {isAdmin && (
+            {(isAdmin || user?.role === 'Staff') && (
               <>
                 <button
                   type="button"
@@ -513,15 +664,7 @@ export default function Sales() {
                   <Plus className="h-4 w-4" />
                   Add sale
                 </button>
-                <button
-                  type="button"
-                  onClick={() => { setShowArchived((value) => !value); setPage(1); }}
-                  className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-medium transition ${showArchived ? 'border-emerald-800 bg-emerald-50 text-emerald-800' : 'border-emerald-900/10 bg-white text-emerald-900/80 hover:bg-emerald-50'}`}
-                >
-                  {showArchived ? <RotateCcw className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
-                  {showArchived ? 'Active sales' : 'Archived sales'}
-                </button>
-                {!showArchived && selectedSaleIds.length > 0 && (
+                {isAdmin && !showArchived && selectedSaleIds.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setPendingArchive({ sales: sales.filter((sale) => selectedSaleIds.includes(sale.id)), restore: false })}
@@ -533,7 +676,7 @@ export default function Sales() {
                 )}
               </>
             )}
-            {isAdmin && (
+            {(isAdmin || user?.role === 'Staff') && (
               <button
                 type="button"
                 onClick={handleImportClick}
@@ -557,24 +700,15 @@ export default function Sales() {
           </div>
         </div>
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-3">
+        <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <article className="rounded-2xl border border-emerald-900/10 bg-white p-4">
-            <p className="text-xs uppercase tracking-[0.3em] text-lime-700/60">Total records</p>
-            <p className="mt-3 text-2xl font-semibold text-emerald-950">{totalRows}</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-lime-700/60">Total Gross Sales</p>
+            <p className="mt-3 text-2xl font-semibold text-emerald-950">{formatCurrency(filteredTotals.totalGrossSales)}</p>
           </article>
 
           <article className="rounded-2xl border border-emerald-900/10 bg-white p-4">
-            <p className="text-xs uppercase tracking-[0.3em] text-lime-700/60">Months covered</p>
-            <p className="mt-3 text-2xl font-semibold text-emerald-950">
-              {!month
-                ? 'All time'
-                : formatMonth(`${month}-01`)}
-            </p>
-          </article>
-
-          <article className="rounded-2xl border border-emerald-900/10 bg-white p-4">
-            <p className="text-xs uppercase tracking-[0.3em] text-lime-700/60">Active category</p>
-            <p className="mt-3 text-2xl font-semibold text-emerald-950">{activeCategoryLabel}</p>
+            <p className="text-xs uppercase tracking-[0.3em] text-lime-700/60">Units Sold</p>
+            <p className="mt-3 text-2xl font-semibold text-emerald-950">{Math.round(filteredTotals.unitsSold).toLocaleString('en-PH')}</p>
           </article>
         </div>
       </div>
@@ -601,26 +735,36 @@ export default function Sales() {
         filterOptions={categoryOptions}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 rounded-2xl border border-emerald-900/10 bg-white px-3 py-3 text-sm text-emerald-950 shadow-sm shadow-emerald-950/5">
-              <Calendar className="h-4 w-4 shrink-0 text-emerald-900/45" />
-              <input
-                type="month"
-                value={month}
-                onChange={(e) => {
-                  setMonth(e.target.value);
-                  setPage(1);
-                }}
-                className="bg-transparent text-sm text-emerald-950 outline-none"
-              />
-            </label>
+            {isAdmin && (
+              <div className="inline-flex items-center rounded-2xl border border-emerald-900/10 bg-white p-1 shadow-sm shadow-emerald-950/5">
+                <button
+                  type="button"
+                  onClick={() => { setShowArchived(false); setPage(1); }}
+                  className={`rounded-xl px-3 py-2 text-sm font-medium transition ${!showArchived ? 'bg-emerald-700 text-white' : 'text-emerald-900/70 hover:bg-emerald-50'}`}
+                >
+                  Active
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowArchived(true); setPage(1); }}
+                  className={`rounded-xl px-3 py-2 text-sm font-medium transition ${showArchived ? 'bg-emerald-700 text-white' : 'text-emerald-900/70 hover:bg-emerald-50'}`}
+                >
+                  Archive
+                </button>
+              </div>
+            )}
+            <SalesPeriodPicker value={period} onChange={(value) => {
+              setPeriod(value);
+              setPage(1);
+            }} />
 
-            {month && (
+            {(period.years.length > 0 || period.months.length > 0) && (
               <button
                 type="button"
                 onClick={() => {
-                  setMonth('');
+                  setPeriod({ years: [], months: [] });
                 }}
-                title="Clear month filter"
+                title="Clear date filter"
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-emerald-900/10 bg-white text-emerald-900/60 transition hover:bg-emerald-50 hover:text-emerald-950"
               >
                 <RefreshCcw className="h-4 w-4" />

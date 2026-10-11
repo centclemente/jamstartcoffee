@@ -5,12 +5,6 @@ import api from '../api/axios';
 import ConfirmModal from '../components/ConfirmModal';
 import Table from '../components/Table';
 
-const filterOptions = [
-  { label: 'All users', value: 'all' },
-  { label: 'Active users', value: 'active' },
-  { label: 'Inactive users', value: 'inactive' },
-];
-
 const roleOptions = ['Admin', 'Staff'];
 
 const JAMSTART_DOMAIN = '@jamstart.com';
@@ -57,7 +51,7 @@ const formatName = (user) =>
 export default function Users() {
   const [users, setUsers] = useState([]);
   const [searchValue, setSearchValue] = useState('');
-  const [filterValue, setFilterValue] = useState('all');
+  const [filterValue, setFilterValue] = useState('active');
   const [loading, setLoading] = useState(true);
   const [mutatingId, setMutatingId] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -586,18 +580,33 @@ export default function Users() {
         searchValue={searchValue}
         onSearchChange={setSearchValue}
         searchPlaceholder="Search name, email, role, or status"
-        filterValue={filterValue}
-        onFilterChange={setFilterValue}
-        filterOptions={filterOptions}
         actions={
-          <button
-            type="button"
-            onClick={openCreateModal}
-            className="inline-flex items-center gap-2 rounded-2xl bg-emerald-950 px-4 py-3 text-sm font-medium text-white shadow-sm shadow-emerald-950/10 transition hover:bg-emerald-900"
-          >
-            <Plus className="h-4 w-4" />
-            Create user
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center rounded-2xl border border-emerald-900/10 bg-white p-1 shadow-sm shadow-emerald-950/5">
+              <button
+                type="button"
+                onClick={() => setFilterValue('active')}
+                className={`rounded-xl px-3 py-2 text-sm font-medium transition ${filterValue === 'active' ? 'bg-emerald-700 text-white' : 'text-emerald-900/70 hover:bg-emerald-50'}`}
+              >
+                Active
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterValue('inactive')}
+                className={`rounded-xl px-3 py-2 text-sm font-medium transition ${filterValue === 'inactive' ? 'bg-emerald-700 text-white' : 'text-emerald-900/70 hover:bg-emerald-50'}`}
+              >
+                Archive
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={openCreateModal}
+              className="inline-flex items-center gap-2 rounded-2xl bg-emerald-950 px-4 py-3 text-sm font-medium text-white shadow-sm shadow-emerald-950/10 transition hover:bg-emerald-900"
+            >
+              <Plus className="h-4 w-4" />
+              Create user
+            </button>
+          </div>
         }
         columns={columns}
         data={visibleUsers}

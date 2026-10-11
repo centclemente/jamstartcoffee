@@ -38,7 +38,7 @@ const currencyFormatter = new Intl.NumberFormat('en-PH', {
   maximumFractionDigits: 0,
 });
 
-const numberFormatter = new Intl.NumberFormat('en-PH');
+const numberFormatter = new Intl.NumberFormat('en-PH', { maximumFractionDigits: 0 });
 
 const monthFormatter = new Intl.DateTimeFormat('en', {
   month: 'short',

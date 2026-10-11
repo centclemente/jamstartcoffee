@@ -1,4 +1,4 @@
-import { parse } from 'csv-parse/sync';
+                                                                                                                                                                                                                                                                                                                                                                                                                       import { parse } from 'csv-parse/sync';
 import ExcelJS from 'exceljs';
 import crypto from 'crypto';
 import prisma from '../lib/prisma.js';
@@ -660,7 +660,7 @@ export const restoreSale = async (req, res) => {
 
 export const getSalesTable = async (req, res) => {
   try {
-    const { startDate, endDate, month, category, item, page = 1, limit = 50, archived = 'false' } = req.query;
+    const { startDate, endDate, month, years, months, category, item, page = 1, limit = 50, archived = 'false' } = req.query;
 
     const where = { archivedAt: archived === 'true' ? { not: null } : null };
 
@@ -674,6 +674,41 @@ export const getSalesTable = async (req, res) => {
         gte: monthRange.startDate,
         lt: monthRange.endDate,
       };
+    }
+
+    const selectedYears = String(years || '')
+      .split(',')
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value >= 2000 && value <= 2100);
+    const selectedMonths = String(months || '')
+      .split(',')
+      .map((value) => Number(value))
+      .filter((value) => Number.isInteger(value) && value >= 1 && value <= 12);
+
+    if (years && selectedYears.length !== String(years).split(',').filter(Boolean).length) {
+      return res.status(400).json({ error: 'Invalid years filter' });
+    }
+    if (months && selectedMonths.length !== String(months).split(',').filter(Boolean).length) {
+      return res.status(400).json({ error: 'Invalid months filter' });
+    }
+    if (selectedYears.length || selectedMonths.length) {
+      let dateFilters = [];
+      if (selectedYears.length && !selectedMonths.length) {
+        dateFilters = selectedYears.map((year) => ({
+          date: { gte: new Date(Date.UTC(year, 0, 1)), lt: new Date(Date.UTC(year + 1, 0, 1)) },
+        }));
+      } else if (!selectedYears.length && selectedMonths.length) {
+        dateFilters = Array.from({ length: 101 }, (_, index) => 2000 + index)
+          .flatMap((year) => selectedMonths.map((selectedMonth) => ({
+            date: { gte: new Date(Date.UTC(year, selectedMonth - 1, 1)), lt: new Date(Date.UTC(year, selectedMonth, 1)) },
+          })));
+      } else {
+        dateFilters = selectedYears.flatMap((year) => selectedMonths.map((selectedMonth) => ({
+          date: { gte: new Date(Date.UTC(year, selectedMonth - 1, 1)), lt: new Date(Date.UTC(year, selectedMonth, 1)) },
+        })));
+      }
+      where.OR = dateFilters;
+      delete where.date;
     }
 
     if (startDate) {
@@ -710,9 +745,11 @@ export const getSalesTable = async (req, res) => {
       return res.status(400).json({ error: 'limit must be between 1 and 200' });
     }
 
-    const [rows, totalRows] = await Promise.all([
+    const [rows, totalRows, totals, monthRows] = await Promise.all([
       prisma.sale.findMany({ where, orderBy: [{ date: 'desc' }, { item_name: 'asc' }], skip: (pageNum - 1) * limitNum, take: limitNum }),
       prisma.sale.count({ where }),
+      prisma.sale.aggregate({ where, _sum: { totalSales: true, items_sold: true } }),
+      prisma.sale.findMany({ where, select: { date: true }, distinct: ['date'] }),
     ]);
 
     const formatted = rows.map((row) => ({
@@ -731,6 +768,11 @@ export const getSalesTable = async (req, res) => {
       limit: limitNum,
       totalRows,
       totalPages: Math.ceil(totalRows / limitNum),
+      totals: {
+        totalGrossSales: Number(totals._sum.totalSales || 0),
+        unitsSold: Number(totals._sum.items_sold || 0),
+        monthsCovered: new Set(monthRows.map((row) => `${row.date.getUTCFullYear()}-${row.date.getUTCMonth() + 1}`)).size,
+      },
       sales: formatted,
     });
   } catch (error) {
