@@ -1,12 +1,18 @@
 import api from './axios';
 
-export async function fetchKpiSummary(from, to) {
-  const response = await api.get('/analytics/kpiSummary', { params: { from, to } });
+export async function fetchKpiSummary(from, to, category = 'all') {
+  const params = { from, to };
+  if (category && category !== 'all') params.category = category;
+
+  const response = await api.get('/analytics/kpiSummary', { params });
   return response.data;
 }
 
-export async function fetchSalesTrend(from, to) {
-  const response = await api.get('/analytics/salesTrend', { params: { from, to } });
+export async function fetchSalesTrend(from, to, category = 'all') {
+  const params = { from, to };
+  if (category && category !== 'all') params.category = category;
+
+  const response = await api.get('/analytics/salesTrend', { params });
   return response.data;
 }
 

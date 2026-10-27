@@ -2,31 +2,30 @@ import prisma from "../lib/prisma.js";
 import { Prisma } from "@prisma/client";
 import axios from "axios";
 
-function monthKeyUTC(dateValue) {
-  const d = new Date(dateValue);
-  const year = d.getUTCFullYear();
-  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
-  return `${year}-${month}`;
+// Builds an optional "AND category = ..." clause. Empty when no category is selected.
+function categoryFilter(category) {
+  return category ? Prisma.sql`AND category = ${category}` : Prisma.empty;
 }
 
-function yearKeyUTC(dateValue) {
-  return new Date(dateValue).getUTCFullYear();
-}
-
+// ---------------------------------------------------------------------------
+// GET /api/analytics/trend
+// Monthly revenue + units, filtered by date range and optional category.
+// ---------------------------------------------------------------------------
 export async function getSalesTrend(req, res) {
   try {
-    const { from, to } = req.analyticsQuery;
+    const { from, to, category } = req.analyticsQuery;
 
-    const rows = await prisma.$queryRaw`
+    const rows = await prisma.$queryRaw(Prisma.sql`
       SELECT
         date_trunc('month', date) AS month,
         SUM("totalSales")::float AS total_revenue,
         SUM(items_sold)::int AS total_units
       FROM "Sale"
       WHERE "archivedAt" IS NULL AND date >= ${from} AND date <= ${to}
+        ${categoryFilter(category)}
       GROUP BY date_trunc('month', date)
       ORDER BY month ASC
-    `;
+    `);
 
     res.json({
       range: { from, to },
@@ -42,11 +41,9 @@ export async function getSalesTrend(req, res) {
   }
 }
 
-
 export async function getTopItems(req, res) {
   try {
     const { from, to, limit, category, order } = req.analyticsQuery;
-    const categoryClause = category ? Prisma.sql`AND category = ${category}` : Prisma.empty;
     const orderClause = order === "asc" ? Prisma.sql`ORDER BY revenue ASC` : Prisma.sql`ORDER BY revenue DESC`;
 
     const rows = await prisma.$queryRaw(Prisma.sql`
@@ -57,7 +54,7 @@ export async function getTopItems(req, res) {
         SUM("totalSales")::float AS revenue
       FROM "Sale"
       WHERE "archivedAt" IS NULL AND date >= ${from} AND date <= ${to}
-        ${categoryClause}
+        ${categoryFilter(category)}
       GROUP BY item_name, category
       ${orderClause}
       LIMIT ${limit}
@@ -77,7 +74,6 @@ export async function getTopItems(req, res) {
     res.status(500).json({ error: "Failed to load top items." });
   }
 }
-
 
 export async function getCategoryBreakdown(req, res) {
   try {
@@ -108,92 +104,31 @@ export async function getCategoryBreakdown(req, res) {
   }
 }
 
-
+// ---------------------------------------------------------------------------
+// GET /api/analytics/kpi
+// Totals for the selected date range and optional category.
+// (MoM / YoY removed: the dashboard no longer uses them.)
+// ---------------------------------------------------------------------------
 export async function getKpiSummary(req, res) {
   try {
-    const { from, to } = req.analyticsQuery;
+    const { from, to, category } = req.analyticsQuery;
 
-    const totalsPromise = prisma.$queryRaw`
+    const rows = await prisma.$queryRaw(Prisma.sql`
       SELECT
         SUM("totalSales")::float AS total_revenue,
         SUM(items_sold)::int AS total_units,
         COUNT(*)::int AS total_transactions
       FROM "Sale"
       WHERE "archivedAt" IS NULL AND date >= ${from} AND date <= ${to}
-    `;
-
-        const currentMonthStart = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), 1));
-        const previousMonthStart = new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() - 1, 1));
-        const currentYearStart = new Date(Date.UTC(to.getUTCFullYear(), 0, 1));
-        const previousYearStart = new Date(Date.UTC(to.getUTCFullYear() - 1, 0, 1));
-
-    const momPromise = prisma.$queryRaw`
-      SELECT
-        date_trunc('month', date) AS month,
-        SUM("totalSales")::float AS revenue
-      FROM "Sale"
-      WHERE "archivedAt" IS NULL AND date >= ${previousMonthStart} AND date < ${new Date(Date.UTC(to.getUTCFullYear(), to.getUTCMonth() + 1, 1))}
-      GROUP BY date_trunc('month', date)
-      ORDER BY month ASC
-    `;
-
-    const yoyPromise = prisma.$queryRaw`
-      SELECT
-        date_trunc('year', date) AS year,
-        SUM("totalSales")::float AS revenue
-      FROM "Sale"
-      WHERE "archivedAt" IS NULL AND date >= ${previousYearStart} AND date <= ${to}
-      GROUP BY date_trunc('year', date)
-      ORDER BY year ASC
-    `;
-
-    const [totalsRows, momRows, yoyRows] = await Promise.all([totalsPromise, momPromise, yoyPromise]);
-    const totals = totalsRows[0] || {};
-
-    const currentMonthKey = monthKeyUTC(currentMonthStart);
-    const previousMonthKey = monthKeyUTC(previousMonthStart);
-
-    const currentMonthRow = momRows.find((r) => monthKeyUTC(r.month) === currentMonthKey);
-    const previousMonthRow = momRows.find((r) => monthKeyUTC(r.month) === previousMonthKey);
-
-    const currentMonthRevenue = currentMonthRow?.revenue ?? 0;
-    const previousMonthRevenue = previousMonthRow?.revenue ?? 0;
-
-    const currentYearRow = yoyRows.find((r) => yearKeyUTC(r.year) === currentYearStart.getUTCFullYear());
-    const previousYearRow = yoyRows.find((r) => yearKeyUTC(r.year) === previousYearStart.getUTCFullYear());
-    const currentYearRevenue = currentYearRow?.revenue ?? 0;
-    const previousYearRevenue = previousYearRow?.revenue ?? 0;
-
-    let momChangePct = null;
-    if (previousMonthRevenue > 0) {
-      momChangePct =
-        ((currentMonthRevenue - previousMonthRevenue) / previousMonthRevenue) * 100;
-    }
-
-    let yoyChangePct = null;
-    if (previousYearRevenue > 0) {
-      yoyChangePct = ((currentYearRevenue - previousYearRevenue) / previousYearRevenue) * 100;
-    }
+        ${categoryFilter(category)}
+    `);
+    const totals = rows[0] || {};
 
     res.json({
       range: { from, to },
       totalRevenue: totals.total_revenue ?? 0,
       totalUnitsSold: totals.total_units ?? 0,
       totalTransactions: totals.total_transactions ?? 0,
-      monthOverMonth: {
-        currentMonth: currentMonthStart,
-        currentMonthRevenue,
-        previousMonth: previousMonthStart,
-        previousMonthRevenue,
-        changePct: momChangePct,
-      },
-      yearOverYear: {
-        currentYear: currentYearStart,
-        currentYearRevenue,
-        previousYear: previousYearStart,
-        previousYearRevenue,
-        changePct: yoyChangePct,
-      },
     });
   } catch (err) {
     console.error("getKpiSummary error:", err);
@@ -305,10 +240,6 @@ export async function getSalesForecast(req, res) {
 
 // ---------------------------------------------------------------------------
 // GET /api/analytics/forecast-by-category
-// Calls the Python forecasting microservice for a PER-CATEGORY breakdown of
-// expected items sold. Each category comes back with its own history,
-// forecast, and a "method" field ("prophet" or "simple_average") so the
-// frontend can indicate which categories have a more/less reliable forecast.
 // ---------------------------------------------------------------------------
 export async function getItemsForecastByCategory(req, res) {
   try {
@@ -360,10 +291,6 @@ export async function getItemsForecastByCategory(req, res) {
 
 // ---------------------------------------------------------------------------
 // GET /api/analytics/forecast-pretrained/:key
-// Calls the Python (FastAPI) forecasting microservice's pre-trained model
-// route. key is "sarima" or "demand" -- matches PRETRAINED_MODEL_META in
-// forecast_service.py. The keys are retained for API compatibility; the
-// configured artifacts are Holt-Winters models.
 // ---------------------------------------------------------------------------
 export async function getPretrainedForecast(req, res) {
   try {
