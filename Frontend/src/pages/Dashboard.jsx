@@ -38,7 +38,7 @@ const currencyFormatter = new Intl.NumberFormat('en-PH', {
   maximumFractionDigits: 0,
 });
 
-const numberFormatter = new Intl.NumberFormat('en-PH', { maximumFractionDigits: 0 });
+const numberFormatter = new Intl.NumberFormat('en-PH');
 
 const monthFormatter = new Intl.DateTimeFormat('en', {
   month: 'short',
@@ -575,7 +575,7 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="grid gap-6">
+      <div className="grid gap-6 xl:grid-cols-2">
         <SectionCard
           title="Monthly sales trend"
           action={
