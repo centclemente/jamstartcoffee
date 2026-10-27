@@ -18,7 +18,10 @@ from prophet import Prophet
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 
-from category_contribution import compute_category_contribution, generate_category_insight
+try:
+    from .category_contribution import compute_category_contribution, generate_category_insight
+except ImportError:
+    from category_contribution import compute_category_contribution, generate_category_insight
 
 # Silence Prophet/cmdstanpy's verbose "Log joint probability" console spam
 logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
@@ -26,7 +29,7 @@ logging.getLogger("prophet").setLevel(logging.WARNING)
 # statsmodels throws a lot of convergence/frequency warnings during grid search -- expected, safe to ignore
 warnings.filterwarnings("ignore")
 
-load_dotenv()
+load_dotenv(Path(__file__).parent / ".env")
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 if not DATABASE_URL:
@@ -37,48 +40,30 @@ app = FastAPI(title="Jamstart Coffee - Sales Forecasting Service")
 MIN_MONTHS_REQUIRED = 6  # Prophet/ARIMA/SARIMA need a reasonable history to be useful
 
 # ---------------------------------------------------------------------------
-# PRE-TRAINED PMDARIMA MODELS (client-supplied)
+# PRE-TRAINED HOLT-WINTERS MODELS (client-supplied)
 # ---------------------------------------------------------------------------
-# These are ALREADY-FITTED pmdarima.ARIMA objects the client sent you --
-# NOT something this service trains. That's a different code path from
-# find_best_sarima_order()/SARIMAX below, which fits a fresh statsmodels
-# model from scratch on every request. Here you load once and call .predict().
-#
-# STEP 1: pip install pmdarima==2.1.1 joblib --break-system-packages
-#         (version pin matters -- both files were pickled with pmdarima 2.1.1)
-#
-# STEP 2: put the two files the client sent you here:
-#           <project_root>/models/sarima_model.pkl
-#           <project_root>/models/demand_sarima_model.pkl
-#
-# STEP 3: fill in PRETRAINED_MODEL_META below once you know from the client
-#         what series each model was trained on (whole store? one category?
-#         which one?) and the last month of data used to train it. Without
-#         the correct last_trained_month, forecasted months will be labeled
-#         wrong even though the numbers themselves are fine.
+# These are already-fitted statsmodels ExponentialSmoothing results. They are
+# loaded once and forecast from their own training index. The "sarima" key is
+# retained as a compatibility alias for the existing sales forecast client.
 MODEL_DIR = Path(__file__).parent / "model"
 
 PRETRAINED_MODEL_META = {
     "sarima": {
-        "file": MODEL_DIR / "sarima_model.pkl",
-        "last_trained_month": "2026-01",  # confirmed against client's own forecast output (Jul-Dec 2026)
-        # Values are in the tens of thousands (56406, 62147...) -- that's
-        # revenue scale (₱), not units. Confirm with client, but plotting
-        # this against unit-scale history was what made the actual line
-        # look flat.
+        "file": MODEL_DIR / "sales_holtwinters_model.pkl",
         "target": "revenue",
+        "model_type": "holt_winters",
     },
     "demand": {
-        "file": MODEL_DIR / "demand_sarima_model.pkl",
-        "last_trained_month": "2026-01",  # confirmed against client's own forecast output (Jul-Dec 2026)
+        "file": MODEL_DIR / "demand_holtwinters_model.pkl",
         "target": "units",
+        "model_type": "holt_winters",
     },
 }
 
 
 @lru_cache(maxsize=None)
 def load_pretrained_model(key: str):
-    """Loads a client-supplied pmdarima model once per process and reuses it."""
+    """Load a client-supplied Holt-Winters model once per process."""
     if key not in PRETRAINED_MODEL_META:
         raise KeyError(f"Unknown pretrained model key '{key}'. Valid keys: {list(PRETRAINED_MODEL_META)}")
     path = PRETRAINED_MODEL_META[key]["file"]
@@ -90,17 +75,51 @@ def load_pretrained_model(key: str):
     return joblib.load(path)
 
 
+def _last_model_month(model) -> pd.Timestamp:
+    """Read the final fitted month from a statsmodels results object's index."""
+    candidates = [
+        getattr(getattr(model, "model", None), "data", None),
+        getattr(model, "data", None),
+    ]
+    for data in candidates:
+        dates = getattr(data, "dates", None)
+        if dates is not None and len(dates):
+            return pd.Timestamp(dates[-1]).to_period("M").to_timestamp()
+        index = getattr(data, "row_labels", None)
+        if index is not None and len(index):
+            return pd.Timestamp(index[-1]).to_period("M").to_timestamp()
+    raise ValueError("The Holt-Winters model does not contain a usable training date index.")
+
+
+def _model_training_start(model) -> pd.Timestamp:
+    """Read the first fitted month from a statsmodels results object's index."""
+    data = getattr(getattr(model, "model", None), "data", None)
+    index = getattr(data, "row_labels", None)
+    if index is None or not len(index):
+        raise ValueError("The Holt-Winters model does not contain a training date index.")
+    return pd.Timestamp(index[0]).to_period("M").to_timestamp()
+
+
+def _holt_winters_prediction_intervals(model, predicted: np.ndarray) -> np.ndarray:
+    """Build approximate 95% intervals from the fitted residual variation."""
+    residuals = np.asarray(getattr(model, "resid", []), dtype=float)
+    residuals = residuals[np.isfinite(residuals)]
+    residual_std = float(np.std(residuals, ddof=1)) if len(residuals) > 1 else 0.0
+    margin = 1.96 * residual_std
+    return np.column_stack((predicted - margin, predicted + margin))
+
+
 def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6) -> dict:
     """
-    Forecasts using a client-supplied pre-trained pmdarima model instead of
+    Forecasts using a client-supplied pre-trained Holt-Winters model instead of
     fitting a new one. Returns both "history" (actual monthly units from
     the Sale table, up through the last imported month) and "forecast"
     (predicted months after that), so the frontend can draw history as a
     solid line and the forecast as a dashed/broken line continuing from it
     -- same pattern as /forecast/sales.
 
-    IMPORTANT: the model is frozen at meta["last_trained_month"] and always
-    predicts sequentially from there. The forecast should pick up right
+    The model is frozen at its embedded training cutoff and always predicts
+    sequentially from there. The forecast should pick up right
     after the last actual month you've imported (fetch_last_actual_month()),
     NOT from today's calendar date and NOT from the model's own training
     cutoff -- those are almost never the same month. We predict far enough
@@ -109,7 +128,8 @@ def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6
     """
     model = load_pretrained_model(key)
     meta = PRETRAINED_MODEL_META[key]
-    last_known_date = pd.to_datetime(meta["last_trained_month"], format="%Y-%m")
+    training_start = _model_training_start(model)
+    last_known_date = _last_model_month(model)
 
     last_actual_month = fetch_last_actual_month()
     if last_actual_month is None:
@@ -122,11 +142,51 @@ def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6
     elapsed_months = max(elapsed_months, 0)
 
     total_periods = elapsed_months + months_ahead
-    predicted, conf_int = model.predict(n_periods=total_periods, return_conf_int=True, alpha=0.05)
-    predicted = np.asarray(predicted)
-    conf_int = np.asarray(conf_int)
+    forecast_method = getattr(model, "forecast", None)
+    if not callable(forecast_method):
+        raise TypeError("The configured pretrained model must provide a forecast(steps) method.")
+    predicted = np.asarray(forecast_method(steps=total_periods), dtype=float)
+    if len(predicted) != total_periods:
+        raise ValueError(
+            f"The pretrained model returned {len(predicted)} predictions; expected {total_periods}."
+        )
+    conf_int = _holt_winters_prediction_intervals(model, predicted)
 
     sales_df = fetch_monthly_sales()
+
+    comparison = []
+    target_field = "total_revenue" if meta["target"] == "revenue" else "total_units"
+    evaluated_errors = []
+    evaluated_percentage_errors = []
+    for row in sales_df.itertuples():
+        actual_date = pd.to_datetime(row.month, format="%Y-%m")
+        prediction_index = (
+            (actual_date.year - last_known_date.year) * 12
+            + (actual_date.month - last_known_date.month)
+            - 1
+        )
+        # The model was trained through last_known_date, so only compare
+        # predictions for later completed months. Never score in-sample data.
+        if prediction_index < 0 or prediction_index >= elapsed_months:
+            continue
+
+        actual_value = float(getattr(row, target_field))
+        predicted_value = max(float(predicted[prediction_index]), 0)
+        error = actual_value - predicted_value
+        absolute_error = abs(error)
+        evaluated_errors.append(error)
+        if actual_value != 0:
+            evaluated_percentage_errors.append(absolute_error / abs(actual_value) * 100)
+
+        comparison.append({
+            "month": row.month,
+            "actualValue": round(actual_value, 2),
+            "predictedValue": round(max(predicted_value, 0), 2),
+            "errorAmount": round(error, 2),
+            "errorPct": round(error / actual_value * 100, 2) if actual_value != 0 else None,
+            "accuracyPct": round(max(0, 100 - (absolute_error / abs(actual_value) * 100)), 2)
+            if actual_value != 0 else None,
+        })
 
     forecast = []
     for i in range(elapsed_months, total_periods):
@@ -162,6 +222,21 @@ def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6
     return {
         "history": history,
         "forecast": forecast,
+        "comparison": comparison,
+        "accuracy": {
+            "evaluatedMonths": len(comparison),
+            "mae": round(float(np.mean(np.abs(evaluated_errors))), 2) if evaluated_errors else None,
+            "rmse": round(float(np.sqrt(np.mean(np.square(evaluated_errors)))), 2)
+            if evaluated_errors else None,
+            "mape": round(float(np.mean(evaluated_percentage_errors)), 2)
+            if evaluated_percentage_errors else None,
+        },
+        "model": {
+            "type": meta["model_type"],
+            "trainingStart": training_start.strftime("%Y-%m"),
+            "trainingEnd": last_known_date.strftime("%Y-%m"),
+            "forecastStart": forecast[0]["month"] if forecast else None,
+        },
         "category_contribution": category_contribution,
         "category_insight": category_insight,
     }
@@ -169,15 +244,10 @@ def run_pretrained_forecast(key: str, months_ahead: int, history_months: int = 6
 
 def update_pretrained_model(key: str, new_values: list[float]):
     """
-    Optional. pmdarima supports .update() to fold in new actuals without a
-    full refit. Only wire this up if the client actually wants the model to
-    evolve over time -- confirm first, since it mutates the cached model in
-    memory. To persist the update across restarts you'd need to
-    joblib.dump() it back to the same path afterward.
+    Holt-Winters results are frozen artifacts and do not support the previous
+    update path. Retraining should produce a new model file.
     """
-    model = load_pretrained_model(key)
-    model.update(np.asarray(new_values))
-    return model
+    raise NotImplementedError("Holt-Winters pretrained models must be replaced after retraining.")
 # ---------------------------------------------------------------------------
 
 
@@ -555,7 +625,11 @@ def run_backtest(df: pd.DataFrame, holdout_months: int) -> dict:
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "time": datetime.utcnow().isoformat(), "version": "v7-prophet-arima-sarima-pretrained"}
+    return {
+        "status": "ok",
+        "time": datetime.utcnow().isoformat(),
+        "version": "v8-holt-winters-pretrained",
+    }
 
 
 @app.get("/forecast/sales")
@@ -705,7 +779,7 @@ def list_categories():
 
 
 # ---------------------------------------------------------------------------
-# Endpoints serving the client's pre-trained pmdarima models
+# Endpoints serving the client's pre-trained Holt-Winters models
 # ---------------------------------------------------------------------------
 @app.get("/forecast/pretrained/{key}")
 def forecast_pretrained(
@@ -714,9 +788,9 @@ def forecast_pretrained(
     history_months: int = Query(6, ge=6, le=24, description="How many recent months to use as the forecast basis"),
 ):
     """
-    Serves forecasts straight from the client's pre-trained SARIMA models
-    (sarima_model.pkl / demand_sarima_model.pkl) instead of fitting a new
-    model on request. key is "sarima" or "demand" per PRETRAINED_MODEL_META.
+    Serves forecasts from the client's pre-trained Holt-Winters models
+    instead of fitting a new model on request. The "sarima" key is retained
+    for API compatibility and maps to the sales model.
     """
     if key not in PRETRAINED_MODEL_META:
         raise HTTPException(
@@ -733,10 +807,13 @@ def forecast_pretrained(
     return {
         "key": key,
         "target": PRETRAINED_MODEL_META[key]["target"],
+        "model": result["model"],
         "monthsAhead": months_ahead,
         "historyMonths": history_months,
         "history": result["history"],
         "forecast": result["forecast"],
+        "comparison": result["comparison"],
+        "accuracy": result["accuracy"],
         "category_contribution": result["category_contribution"],
         "category_insight": result["category_insight"],
     }

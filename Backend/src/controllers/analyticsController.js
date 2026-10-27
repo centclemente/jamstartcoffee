@@ -362,9 +362,8 @@ export async function getItemsForecastByCategory(req, res) {
 // GET /api/analytics/forecast-pretrained/:key
 // Calls the Python (FastAPI) forecasting microservice's pre-trained model
 // route. key is "sarima" or "demand" -- matches PRETRAINED_MODEL_META in
-// forecast_service.py. Unlike getSalesForecast/getItemsForecastByCategory,
-// this doesn't fit a fresh model per request -- it serves predictions from
-// the client-supplied .pkl files, so it should respond much faster.
+// forecast_service.py. The keys are retained for API compatibility; the
+// configured artifacts are Holt-Winters models.
 // ---------------------------------------------------------------------------
 export async function getPretrainedForecast(req, res) {
   try {
