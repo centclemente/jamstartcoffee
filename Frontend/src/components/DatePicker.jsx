@@ -44,6 +44,10 @@ function shiftMonth(date, amount) {
   return { year: next.getFullYear(), month: next.getMonth(), day: 1 };
 }
 
+function shiftYear(date, amount) {
+  return { year: date.year + amount, month: date.month, day: 1 };
+}
+
 export default function DatePicker({ value, onChange, min, max, mode = 'date', label, disabled = false }) {
   const pickerRef = useRef(null);
   const selected = parseValue(value, mode);
@@ -72,8 +76,12 @@ export default function DatePicker({ value, onChange, min, max, mode = 'date', l
   }, [value]); // Keep the visible calendar aligned after a parent reset.
 
   const viewKey = monthKey(view.year, view.month);
-  const canGoPrevious = !minDate || viewKey > monthKey(minDate.year, minDate.month);
-  const canGoNext = !maxDate || viewKey < monthKey(maxDate.year, maxDate.month);
+  const canGoPrevious = mode === 'month'
+    ? !minDate || view.year > minDate.year
+    : !minDate || viewKey > monthKey(minDate.year, minDate.month);
+  const canGoNext = mode === 'month'
+    ? !maxDate || view.year < maxDate.year
+    : !maxDate || viewKey < monthKey(maxDate.year, maxDate.month);
 
   const days = useMemo(() => {
     if (mode === 'month') return [];
@@ -122,7 +130,7 @@ export default function DatePicker({ value, onChange, min, max, mode = 'date', l
           <div className="flex items-center justify-between">
             <button
               type="button"
-              onClick={() => canGoPrevious && setView(shiftMonth(view, -1))}
+              onClick={() => canGoPrevious && setView(mode === 'month' ? shiftYear(view, -1) : shiftMonth(view, -1))}
               disabled={!canGoPrevious}
               className="rounded-xl p-2 text-emerald-900/70 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-30"
               aria-label="Previous month"
@@ -130,11 +138,11 @@ export default function DatePicker({ value, onChange, min, max, mode = 'date', l
               <ChevronLeft className="h-4 w-4" />
             </button>
             <p className="text-sm font-semibold text-emerald-950">
-              {MONTH_NAMES[view.month]} {view.year}
+              {mode === 'month' ? view.year : `${MONTH_NAMES[view.month]} ${view.year}`}
             </p>
             <button
               type="button"
-              onClick={() => canGoNext && setView(shiftMonth(view, 1))}
+              onClick={() => canGoNext && setView(mode === 'month' ? shiftYear(view, 1) : shiftMonth(view, 1))}
               disabled={!canGoNext}
               className="rounded-xl p-2 text-emerald-900/70 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-30"
               aria-label="Next month"

@@ -63,6 +63,16 @@ function formatDateLabel(value) {
   });
 }
 
+function monthStart(value) {
+  return `${value}-01`;
+}
+
+function monthEnd(value) {
+  const [year, month] = value.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${value}-${String(lastDay).padStart(2, '0')}`;
+}
+
 function formatPct(value) {
   return `${Math.abs(value).toFixed(1)}%`;
 }
@@ -252,10 +262,10 @@ function KpiStatCard({ icon, label, value, sublabel, loading, error }) {
 export default function Dashboard() {
   // ---- General filters (apply to every card and chart) ----
   const [range, setRange] = useState(() => getAllTimeRange());
-  const [dateMode, setDateMode] = useState('all'); // 'all' = All time, 'custom' = pick From/To
+  const [dateMode, setDateMode] = useState('all');
   const [ready, setReady] = useState(false); // true once we know where the data starts
   const earliestRef = useRef(null);
-  const isCustomRangeRef = useRef(false); // true once the user edits the dates by hand
+  const isCustomRangeRef = useRef(false); // true once the user picks a period or edits the dates
   const [category, setCategory] = useState('all');
   const [categoryOptions, setCategoryOptions] = useState([{ label: 'All categories', value: 'all' }]);
   const { from, to } = range;
@@ -290,18 +300,22 @@ export default function Dashboard() {
     if (!value) return;
     isCustomRangeRef.current = true;
     setDateMode('custom');
-    setRange((current) => ({ from: value, to: value > current.to ? value : current.to }));
+    const nextFrom = monthStart(value);
+    setRange((current) => ({ from: nextFrom, to: nextFrom > current.to ? monthEnd(value) : current.to }));
   };
 
   const handleToChange = (value) => {
     if (!value) return;
     isCustomRangeRef.current = true;
     setDateMode('custom');
-    setRange((current) => ({ from: value < current.from ? value : current.from, to: value }));
+    const nextTo = monthEnd(value);
+    setRange((current) => ({ from: nextTo < current.from ? monthStart(value) : current.from, to: nextTo }));
   };
 
   const handleReset = () => {
-    handleDateModeChange('all');
+    isCustomRangeRef.current = false;
+    setDateMode('all');
+    setRange(getAllTimeRange(earliestRef.current));
     setCategory('all');
   };
 
@@ -509,15 +523,17 @@ export default function Dashboard() {
             </button>
 
             <DatePicker
-              value={from}
-              max={to}
+              value={from.slice(0, 7)}
+              max={to.slice(0, 7)}
               onChange={handleFromChange}
+              mode="month"
               label="From"
             />
             <DatePicker
-              value={to}
-              min={from}
+              value={to.slice(0, 7)}
+              min={from.slice(0, 7)}
               onChange={handleToChange}
+              mode="month"
               label="To"
             />
 

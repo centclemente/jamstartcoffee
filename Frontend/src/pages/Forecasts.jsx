@@ -36,16 +36,8 @@ const DEFAULT_MONTHS_SHOWN = 3;
 // API keys are retained for compatibility; the backend now serves Holt-Winters
 // models for both forecast cards.
 const PRETRAINED_MODELS = [
-  {
-    key: 'sarima',
-    label: 'Sales forecast',
-    eyebrow: 'Holt-Winters model',
-  },
-  {
-    key: 'demand',
-    label: 'Demand forecast',
-    eyebrow: 'Holt-Winters model',
-  },
+  { key: 'sarima' },
+  { key: 'demand' },
 ];
 
 const units = (n) => `${Number(n ?? 0).toLocaleString('en-PH', { maximumFractionDigits: 0 })} units`;
@@ -53,11 +45,18 @@ const peso = (n) => `₱${Number(n ?? 0).toLocaleString('en-PH', { maximumFracti
 const formatValue = (n, target) => (target === 'revenue' ? peso(n) : units(n));
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const FORECAST_TABLE_START_MONTH = '2026-01';
+const FORECAST_TABLE_START_QUARTER = '2026-Q1';
 
 // Returns "YYYY-MM" for a month string, or null when it isn't in that format.
 function monthKey(value) {
   const match = /^(\d{4})-(\d{2})/.exec(String(value ?? ''));
   return match ? `${match[1]}-${match[2]}` : null;
+}
+
+function isFromForecastTableStart(value) {
+  const key = monthKey(value);
+  return key !== null && key >= FORECAST_TABLE_START_MONTH;
 }
 
 // "2026-07" -> "Jul 2026". Anything that isn't YYYY-MM is returned unchanged.
@@ -78,6 +77,13 @@ function quarterOf(key) {
   const year = key.slice(0, 4);
   const quarter = Math.ceil(Number(key.slice(5)) / 3);
   return { id: `${year}-Q${quarter}`, label: `Q${quarter} ${year}` };
+}
+
+function quarterMonthLabel(keys) {
+  return [...new Set(keys)]
+    .sort()
+    .map((key) => MONTH_NAMES[Number(key.slice(5)) - 1])
+    .join(', ');
 }
 
 async function fetchJSON(url) {
@@ -104,11 +110,13 @@ function buildMonthlyView(data, target, until) {
   const backtests = new Map((data?.comparison ?? []).map((row) => [row.month, row.predictedValue]));
 
   const chartData = [
-    ...(data?.history ?? []).map((h) => ({
-      month: formatMonthLabel(h.month),
-      actualValue: h[field],
-      predictedValue: backtests.get(h.month) ?? null,
-    })),
+    ...(data?.history ?? [])
+      .filter((h) => isFromForecastTableStart(h.month))
+      .map((h) => ({
+        month: formatMonthLabel(h.month),
+        actualValue: h[field],
+        predictedValue: backtests.get(h.month) ?? null,
+      })),
     ...forecast.map((f) => ({
       month: formatMonthLabel(f.month),
       actualValue: null,
@@ -118,21 +126,25 @@ function buildMonthlyView(data, target, until) {
 
   return {
     chartData,
-    forecastRows: forecast.map((f) => ({
-      key: f.month,
-      label: formatMonthLabel(f.month),
-      value: f.predictedValue,
-      note: null,
-    })),
-    comparisonRows: (data?.comparison ?? []).map((row) => ({
-      key: row.month,
-      label: formatMonthLabel(row.month),
-      actual: row.actualValue,
-      predicted: row.predictedValue,
-      accuracy: row.accuracyPct,
-    })),
+    forecastRows: forecast
+      .filter((f) => isFromForecastTableStart(f.month))
+      .map((f) => ({
+        key: f.month,
+        label: formatMonthLabel(f.month),
+        value: f.predictedValue,
+        note: null,
+      })),
+    comparisonRows: (data?.comparison ?? [])
+      .filter((row) => isFromForecastTableStart(row.month))
+      .map((row) => ({
+        key: row.month,
+        label: formatMonthLabel(row.month),
+        actual: row.actualValue,
+        predicted: row.predictedValue,
+        accuracy: row.accuracyPct,
+      })),
     contributionColumns: (data?.category_contribution ?? [])
-      .filter((month) => withinUntil(month.month))
+      .filter((month) => withinUntil(month.month) && isFromForecastTableStart(month.month))
       .map((month) => ({
         key: month.month,
         label: formatMonthLabel(month.month),
@@ -160,11 +172,11 @@ function buildQuarterlyView(data, target, until) {
   };
   (data?.history ?? []).forEach((h) => {
     const key = monthKey(h.month);
-    if (key) entry(key).actual = h[field];
+    if (key && key >= FORECAST_TABLE_START_MONTH) entry(key).actual = h[field];
   });
   (data?.comparison ?? []).forEach((row) => {
     const key = monthKey(row.month);
-    if (key) entry(key).backtest = row.predictedValue;
+    if (key && key >= FORECAST_TABLE_START_MONTH) entry(key).backtest = row.predictedValue;
   });
   const forecast = (data?.forecast ?? []).filter((f) => withinUntil(f.month));
   forecast.forEach((f) => {
@@ -177,7 +189,7 @@ function buildQuarterlyView(data, target, until) {
   [...byMonth.keys()].sort().forEach((key) => {
     const { id, label } = quarterOf(key);
     if (!quarters.has(id)) quarters.set(id, { id, label, entries: [] });
-    quarters.get(id).entries.push(byMonth.get(key));
+    quarters.get(id).entries.push({ key, ...byMonth.get(key) });
   });
 
   const chartData = [];
@@ -185,6 +197,7 @@ function buildQuarterlyView(data, target, until) {
   const comparisonRows = [];
 
   quarters.forEach(({ id, label, entries }) => {
+    const includedMonths = quarterMonthLabel(entries.map((entry) => entry.key));
     const hasForecast = entries.some((e) => e.forecast != null);
 
     if (hasForecast) {
@@ -197,8 +210,13 @@ function buildQuarterlyView(data, target, until) {
       if (includesActuals) notes.push('incl. actuals');
       if (covered < 3) notes.push(`${covered} mo`);
 
-      chartData.push({ month: label, actualValue: null, predictedValue: value });
-      forecastRows.push({ key: id, label, value, note: notes.join(', ') || null });
+      chartData.push({ month: `${label}\n${includedMonths}`, actualValue: null, predictedValue: value });
+      forecastRows.push({
+        key: id,
+        label,
+        value,
+        note: notes.join(', ') || null,
+      });
       return;
     }
 
@@ -208,7 +226,7 @@ function buildQuarterlyView(data, target, until) {
     const complete = actualEntries.length === 3 && actualEntries.every((e) => e.backtest != null);
     const predicted = complete ? actualEntries.reduce((sum, e) => sum + e.backtest, 0) : null;
 
-    chartData.push({ month: label, actualValue: actual, predictedValue: predicted });
+    chartData.push({ month: `${label}\n${includedMonths}`, actualValue: actual, predictedValue: predicted });
     if (complete) {
       comparisonRows.push({
         key: id,
@@ -228,9 +246,12 @@ function buildQuarterlyView(data, target, until) {
       const key = monthKey(month.month);
       if (!key) return;
       const { id, label } = quarterOf(key);
-      if (!contributionGroups.has(id)) contributionGroups.set(id, { id, label, months: 0, totals: new Map() });
+      if (!contributionGroups.has(id)) {
+        contributionGroups.set(id, { id, label, months: 0, keys: [], totals: new Map() });
+      }
       const group = contributionGroups.get(id);
       group.months += 1;
+      group.keys.push(key);
       (month.categories || []).forEach((item) => {
         group.totals.set(item.category, (group.totals.get(item.category) ?? 0) + Number(item.amount || 0));
       });
@@ -240,7 +261,7 @@ function buildQuarterlyView(data, target, until) {
     const grand = [...group.totals.values()].reduce((sum, amount) => sum + amount, 0);
     return {
       key: group.id,
-      label: group.months < 3 ? `${group.label} (${group.months} mo)` : group.label,
+      label: group.label,
       categories: [...group.totals.entries()].map(([category, amount]) => ({
         category,
         amount,
@@ -251,9 +272,9 @@ function buildQuarterlyView(data, target, until) {
 
   return {
     chartData,
-    forecastRows,
-    comparisonRows,
-    contributionColumns,
+    forecastRows: forecastRows.filter((row) => row.key >= FORECAST_TABLE_START_QUARTER),
+    comparisonRows: comparisonRows.filter((row) => row.key >= FORECAST_TABLE_START_QUARTER),
+    contributionColumns: contributionColumns.filter((column) => column.key >= FORECAST_TABLE_START_QUARTER),
     projectedTotal: forecast.reduce((sum, f) => sum + (f.predictedValue ?? 0), 0),
     rangeLabel: forecast.length
       ? `${formatMonthLabel(forecast[0].month)} to ${formatMonthLabel(forecast[forecast.length - 1].month)}`
@@ -324,11 +345,31 @@ function ForecastFilters({ granularity, onGranularityChange, until, onUntilChang
 }
 
 function ForecastChart({ chartData, target }) {
+  const tick = ({ x, y, payload }) => {
+    const [period, months] = String(payload.value).split('\n');
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text textAnchor="middle" fill="#14532d" fontSize={12}>{period}</text>
+        {months && (
+          <text y={15} textAnchor="middle" fill="#14532d" fontSize={10}>{months}</text>
+        )}
+      </g>
+    );
+  };
+
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <ComposedChart data={chartData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+      <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 20, bottom: 8 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#d6e2db" />
-        <XAxis dataKey="month" tickLine={false} axisLine={false} fontSize={12} />
+        <XAxis
+          dataKey="month"
+          tickLine={false}
+          axisLine={false}
+          tick={tick}
+          height={38}
+          tickMargin={6}
+          padding={{ left: 12, right: 12 }}
+        />
         <YAxis
           tickLine={false}
           axisLine={false}
@@ -443,7 +484,9 @@ function ComparisonTable({ rows, periodLabel, target }) {
           <tbody>
             {rows.map((row) => (
               <tr key={row.key} className="border-b border-emerald-900/5">
-                <td className="py-2 pr-4 font-medium text-emerald-950">{row.label}</td>
+                <td className="py-2 pr-4 font-medium text-emerald-950">
+                  {row.label}
+                </td>
                 <td className="px-3 py-2 text-right text-emerald-900/75">{fmt(row.actual)}</td>
                 <td className="px-3 py-2 text-right text-emerald-900/75">{fmt(row.predicted)}</td>
                 <td className="px-3 py-2 text-right text-emerald-900/75">
@@ -510,7 +553,9 @@ function CategoryContributionTable({ columns, target, periodWord }) {
             <tr className="border-b border-emerald-900/10 text-left text-xs uppercase tracking-[0.16em] text-lime-700/60">
               <th className="py-2 pr-4">Category</th>
               {columns.map((column) => (
-                <th key={column.key} className="px-3 py-2 text-right">{column.label}</th>
+                <th key={column.key} className="px-3 py-2 text-right">
+                  {column.label}
+                </th>
               ))}
             </tr>
           </thead>
@@ -720,9 +765,8 @@ export default function Forecasts() {
               <BrainCircuit className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-lime-700/60">Pretrained model</p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-emerald-950">
-                Gross sales forecast
+              <h2 className="text-2xl font-semibold tracking-tight text-emerald-950">
+                Forecasted Gross sales
               </h2>
             </div>
           </div>
@@ -755,9 +799,8 @@ export default function Forecasts() {
               <BrainCircuit className="h-5 w-5" />
             </div>
             <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-lime-700/60">{demandModel.eyebrow}</p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight text-emerald-950">
-                {demandModel.label}
+              <h2 className="text-2xl font-semibold tracking-tight text-emerald-950">
+                Forecasted Units Sold
               </h2>
             </div>
           </div>
