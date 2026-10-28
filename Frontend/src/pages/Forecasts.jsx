@@ -86,6 +86,19 @@ function quarterMonthLabel(keys) {
     .join(', ');
 }
 
+function withForecastGrowth(rows) {
+  return rows.map((row, index) => {
+    const previous = index > 0 ? Number(rows[index - 1].value) : null;
+    const current = Number(row.value);
+    return {
+      ...row,
+      growth: previous && Number.isFinite(current)
+        ? ((current - previous) / previous) * 100
+        : null,
+    };
+  });
+}
+
 async function fetchJSON(url) {
   const res = await fetch(url);
   const data = await res.json().catch(() => ({}));
@@ -126,14 +139,16 @@ function buildMonthlyView(data, target, until) {
 
   return {
     chartData,
-    forecastRows: forecast
-      .filter((f) => isFromForecastTableStart(f.month))
-      .map((f) => ({
-        key: f.month,
-        label: formatMonthLabel(f.month),
-        value: f.predictedValue,
-        note: null,
-      })),
+    forecastRows: withForecastGrowth(
+      forecast
+        .filter((f) => isFromForecastTableStart(f.month))
+        .map((f) => ({
+          key: f.month,
+          label: formatMonthLabel(f.month),
+          value: f.predictedValue,
+          note: null,
+        })),
+    ),
     comparisonRows: (data?.comparison ?? [])
       .filter((row) => isFromForecastTableStart(row.month))
       .map((row) => ({
@@ -272,7 +287,9 @@ function buildQuarterlyView(data, target, until) {
 
   return {
     chartData,
-    forecastRows: forecastRows.filter((row) => row.key >= FORECAST_TABLE_START_QUARTER),
+    forecastRows: withForecastGrowth(
+      forecastRows.filter((row) => row.key >= FORECAST_TABLE_START_QUARTER),
+    ),
     comparisonRows: comparisonRows.filter((row) => row.key >= FORECAST_TABLE_START_QUARTER),
     contributionColumns: contributionColumns.filter((column) => column.key >= FORECAST_TABLE_START_QUARTER),
     projectedTotal: forecast.reduce((sum, f) => sum + (f.predictedValue ?? 0), 0),
@@ -422,6 +439,7 @@ function ForecastTable({ forecastKey, rows, periodLabel, expanded, onToggle, tar
             <tr className="border-b border-emerald-900/10 text-left text-xs uppercase tracking-[0.2em] text-lime-700/60">
               <th className="py-2 pr-4">{periodLabel}</th>
               <th className="py-2 pr-4 text-right">Predicted</th>
+              <th className="py-2 text-right">Growth</th>
             </tr>
           </thead>
           <tbody>
@@ -432,6 +450,9 @@ function ForecastTable({ forecastKey, rows, periodLabel, expanded, onToggle, tar
                   {row.note && <span className="ml-2 text-xs font-normal text-emerald-900/50">({row.note})</span>}
                 </td>
                 <td className="py-2 pr-4 text-right text-emerald-900/80">{fmt(row.value)}</td>
+                <td className={`py-2 text-right ${row.growth == null ? 'text-emerald-900/40' : row.growth >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                  {row.growth == null ? '—' : `${row.growth >= 0 ? '+' : ''}${row.growth.toFixed(1)}%`}
+                </td>
               </tr>
             ))}
           </tbody>
