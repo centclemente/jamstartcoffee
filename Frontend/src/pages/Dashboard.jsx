@@ -503,8 +503,7 @@ export default function Dashboard() {
 
         <div className="relative flex flex-col gap-6">
           <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">Analytics dashboard</p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-emerald-950 sm:text-4xl">Welcome back</h1>
+            <h1 className="text-3xl font-semibold uppercase tracking-[0.2em] text-emerald-950 sm:text-4xl">Analytics dashboard</h1>
           </div>
 
           {/* General filters: apply to every card and chart on this page */}

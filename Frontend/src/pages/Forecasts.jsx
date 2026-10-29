@@ -86,13 +86,13 @@ function quarterMonthLabel(keys) {
     .join(', ');
 }
 
-function withForecastGrowth(rows) {
+function withForecastGrowth(rows, baseline = null) {
   return rows.map((row, index) => {
-    const previous = index > 0 ? Number(rows[index - 1].value) : null;
+    const previous = index > 0 ? Number(rows[index - 1].value) : Number(baseline);
     const current = Number(row.value);
     return {
       ...row,
-      growth: previous && Number.isFinite(current)
+      growth: previous > 0 && Number.isFinite(current)
         ? ((current - previous) / previous) * 100
         : null,
     };
@@ -120,6 +120,15 @@ function buildMonthlyView(data, target, until) {
   };
 
   const forecast = (data?.forecast ?? []).filter((f) => withinUntil(f.month));
+  const firstForecastKey = monthKey(forecast[0]?.month);
+  const lastActual = [...(data?.history ?? [])]
+    .filter((entry) => {
+      const key = monthKey(entry.month);
+      return key && (!firstForecastKey || key < firstForecastKey);
+    })
+    .sort((left, right) => monthKey(left.month).localeCompare(monthKey(right.month)))
+    .at(-1);
+  const lastActualValue = lastActual ? lastActual[field] : null;
   const backtests = new Map((data?.comparison ?? []).map((row) => [row.month, row.predictedValue]));
 
   const chartData = [
@@ -148,6 +157,7 @@ function buildMonthlyView(data, target, until) {
           value: f.predictedValue,
           note: null,
         })),
+      lastActualValue,
     ),
     comparisonRows: (data?.comparison ?? [])
       .filter((row) => isFromForecastTableStart(row.month))
@@ -232,6 +242,14 @@ function buildQuarterlyView(data, target, until) {
         value,
         note: notes.join(', ') || null,
       });
+
+      const firstForecastQuarter = forecastRows[0]?.key;
+      const previousActualQuarter = [...quarters.values()]
+        .filter((quarter) => quarter.id < firstForecastQuarter)
+        .at(-1);
+      const previousActualValue = previousActualQuarter?.entries
+        .filter((entry) => entry.actual != null)
+        .reduce((sum, entry) => sum + entry.actual, 0) || null;
       return;
     }
 
@@ -289,6 +307,7 @@ function buildQuarterlyView(data, target, until) {
     chartData,
     forecastRows: withForecastGrowth(
       forecastRows.filter((row) => row.key >= FORECAST_TABLE_START_QUARTER),
+      previousActualValue,
     ),
     comparisonRows: comparisonRows.filter((row) => row.key >= FORECAST_TABLE_START_QUARTER),
     contributionColumns: contributionColumns.filter((column) => column.key >= FORECAST_TABLE_START_QUARTER),
