@@ -15,7 +15,7 @@ body {
 	margin: 0;
 	background: #07120b;
 	color: #f8fafc;
-  font-weight: 600;
+  font-weight: 400;
 }
 
 #root {
@@ -24,6 +24,43 @@ body {
 
 * {
 	box-sizing: border-box;
+}
+
+.page-title {
+  color: #042f2e;
+  font-size: clamp(1.875rem, 3vw, 2.25rem);
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.section-label {
+  display: block;
+  color: #527a16 !important;
+  font-size: 0.75rem !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.35em !important;
+  line-height: 1.25 !important;
+  text-transform: uppercase !important;
+}
+
+.section-heading {
+  color: #042f2e;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.content-heading {
+  color: #042f2e;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  line-height: 1.25;
+  text-transform: uppercase;
 }
 
 
@@ -71,4 +108,3 @@ select.custom-select {
 select.custom-select::-ms-expand {
   display: none;
 }
-

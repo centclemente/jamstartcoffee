@@ -646,8 +646,8 @@ export default function Sales() {
       <div className="rounded-[1.5rem] border border-emerald-900/10 bg-[#fbfaf7] p-6 sm:p-8">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">Sales</p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-emerald-950 sm:text-4xl">
+            <p className="section-label">Sales</p>
+            <h1 className="page-title mt-3">
               Sales records
             </h1>
           </div>
@@ -708,12 +708,12 @@ export default function Sales() {
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2">
           <article className="rounded-2xl border border-emerald-900/10 bg-white p-4">
-            <p className="text-xs uppercase tracking-[0.3em] text-lime-700/60">Total Gross Sales</p>
+            <p className="content-heading">Total Gross Sales</p>
             <p className="mt-3 text-2xl font-semibold text-emerald-950">{formatCurrency(filteredTotals.totalGrossSales)}</p>
           </article>
 
           <article className="rounded-2xl border border-emerald-900/10 bg-white p-4">
-            <p className="text-xs uppercase tracking-[0.3em] text-lime-700/60">Units Sold</p>
+            <p className="content-heading">Units Sold</p>
             <p className="mt-3 text-2xl font-semibold text-emerald-950">{Math.round(filteredTotals.unitsSold).toLocaleString('en-PH')}</p>
           </article>
         </div>

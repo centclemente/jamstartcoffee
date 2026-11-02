@@ -100,7 +100,10 @@ function withForecastGrowth(rows, baseline = null) {
 }
 
 async function fetchJSON(url) {
-  const res = await fetch(url);
+  const token = localStorage.getItem('token');
+  const res = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.error) {
     throw new Error(data.error || `Request failed (${res.status})`);
@@ -243,13 +246,6 @@ function buildQuarterlyView(data, target, until) {
         note: notes.join(', ') || null,
       });
 
-      const firstForecastQuarter = forecastRows[0]?.key;
-      const previousActualQuarter = [...quarters.values()]
-        .filter((quarter) => quarter.id < firstForecastQuarter)
-        .at(-1);
-      const previousActualValue = previousActualQuarter?.entries
-        .filter((entry) => entry.actual != null)
-        .reduce((sum, entry) => sum + entry.actual, 0) || null;
       return;
     }
 
@@ -303,6 +299,14 @@ function buildQuarterlyView(data, target, until) {
     };
   });
 
+  const firstForecastQuarter = forecastRows[0]?.key;
+  const previousActualQuarter = [...quarters.values()]
+    .filter((quarter) => quarter.id < firstForecastQuarter)
+    .at(-1);
+  const previousActualValue = previousActualQuarter?.entries
+    .filter((entry) => entry.actual != null)
+    .reduce((sum, entry) => sum + entry.actual, 0) || null;
+
   return {
     chartData,
     forecastRows: withForecastGrowth(
@@ -333,7 +337,7 @@ function ValueTooltip({ active, payload, label, target }) {
   const visible = payload.filter((p) => p.value != null);
   if (!visible.length) return null;
   return (
-    <div className="rounded-2xl border border-emerald-900/10 bg-white px-4 py-3 text-sm shadow-sm">
+    <div className="rounded-2xl border border-emerald-900/15 bg-white px-4 py-3 text-base shadow-sm">
       <p className="mb-1 font-medium text-emerald-950">{label}</p>
       {visible.map((p) => (
         <p key={p.dataKey} style={{ color: p.stroke }}>
@@ -346,16 +350,16 @@ function ValueTooltip({ active, payload, label, target }) {
 
 function ForecastFilters({ granularity, onGranularityChange, until, onUntilChange, minUntil, maxUntil }) {
   const wrapperClass =
-    'flex items-center gap-2 rounded-2xl border border-emerald-900/10 bg-white px-3 py-2 text-sm text-emerald-950 shadow-sm shadow-emerald-950/5';
+    'flex items-center gap-2 rounded-2xl border border-emerald-900/15 bg-white px-3 py-2 text-base text-emerald-950 shadow-sm shadow-emerald-950/5';
 
   return (
     <div className="mt-6 flex flex-wrap items-center gap-3">
       <label className={wrapperClass}>
-        <span className="text-xs text-emerald-900/55">View</span>
+        <span className="text-sm font-medium text-emerald-900/80">View</span>
         <select
           value={granularity}
           onChange={(event) => onGranularityChange(event.target.value)}
-          className="bg-transparent text-sm text-emerald-950 outline-none"
+          className="bg-transparent text-base text-emerald-950 outline-none"
         >
           <option value="monthly">Monthly</option>
           <option value="quarterly">Quarterly</option>
@@ -372,7 +376,7 @@ function ForecastFilters({ granularity, onGranularityChange, until, onUntilChang
       />
 
       {minUntil && maxUntil && (
-        <span className="text-xs text-emerald-900/50">
+        <span className="text-sm text-emerald-900/75">
           Available: {formatMonthLabel(minUntil)} to {formatMonthLabel(maxUntil)}
         </span>
       )}
@@ -385,9 +389,9 @@ function ForecastChart({ chartData, target }) {
     const [period, months] = String(payload.value).split('\n');
     return (
       <g transform={`translate(${x},${y})`}>
-        <text textAnchor="middle" fill="#14532d" fontSize={12}>{period}</text>
+        <text textAnchor="middle" fill="#14532d" fontSize={13}>{period}</text>
         {months && (
-          <text y={15} textAnchor="middle" fill="#14532d" fontSize={10}>{months}</text>
+          <text y={16} textAnchor="middle" fill="#14532d" fontSize={12}>{months}</text>
         )}
       </g>
     );
@@ -409,7 +413,7 @@ function ForecastChart({ chartData, target }) {
         <YAxis
           tickLine={false}
           axisLine={false}
-          fontSize={12}
+          fontSize={13}
           width={target === 'revenue' ? 70 : 50}
           tickFormatter={(v) => (target === 'revenue' ? peso(v) : v)}
         />
@@ -418,7 +422,7 @@ function ForecastChart({ chartData, target }) {
           verticalAlign="top"
           align="right"
           iconType="plainline"
-          wrapperStyle={{ fontSize: 12, color: '#14532d', paddingBottom: 8 }}
+          wrapperStyle={{ fontSize: 13, color: '#14532d', paddingBottom: 8 }}
         />
         <Line
           type="linear"
@@ -453,25 +457,36 @@ function ForecastTable({ forecastKey, rows, periodLabel, expanded, onToggle, tar
   return (
     <div className="mt-4">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[320px] border-collapse text-sm">
+        <table className="w-full min-w-[34rem] border-collapse text-base">
+          <colgroup>
+            <col className="w-[20%]" />
+            <col className="w-[20%]" />
+            <col className="w-[20%]" />
+            <col className="w-[20%]" />
+            <col className="w-[20%]" />
+          </colgroup>
           <thead>
-            <tr className="border-b border-emerald-900/10 text-left text-xs uppercase tracking-[0.2em] text-lime-700/60">
-              <th className="py-2 pr-4">{periodLabel}</th>
-              <th className="py-2 pr-4 text-right">Predicted</th>
+            <tr className="border-b border-emerald-900/15 text-left text-sm uppercase tracking-[0.12em] text-emerald-900/80">
+              <th aria-hidden="true" />
+              <th className="py-2 pr-3">{periodLabel}</th>
+              <th className="py-2 text-center">Predicted</th>
               <th className="py-2 text-right">Growth</th>
+              <th aria-hidden="true" />
             </tr>
           </thead>
           <tbody>
             {visibleRows.map((row) => (
               <tr key={row.key} className="border-b border-emerald-900/5">
-                <td className="py-2 pr-4 font-medium text-emerald-950">
+                <td aria-hidden="true" />
+                <td className="py-2 pr-3 font-medium text-emerald-950">
                   {row.label}
-                  {row.note && <span className="ml-2 text-xs font-normal text-emerald-900/50">({row.note})</span>}
+                  {row.note && <span className="ml-2 text-sm font-normal text-emerald-900/70">({row.note})</span>}
                 </td>
-                <td className="py-2 pr-4 text-right text-emerald-900/80">{fmt(row.value)}</td>
-                <td className={`py-2 text-right ${row.growth == null ? 'text-emerald-900/40' : row.growth >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
+                <td className="py-2 text-center text-emerald-900/90">{fmt(row.value)}</td>
+                <td className={`py-2 text-right ${row.growth == null ? 'text-emerald-900/60' : row.growth >= 0 ? 'text-emerald-700' : 'text-rose-600'}`}>
                   {row.growth == null ? '—' : `${row.growth >= 0 ? '+' : ''}${row.growth.toFixed(1)}%`}
                 </td>
+                <td aria-hidden="true" />
               </tr>
             ))}
           </tbody>
@@ -481,7 +496,7 @@ function ForecastTable({ forecastKey, rows, periodLabel, expanded, onToggle, tar
       {rows.length > 3 && (
         <button
           onClick={() => onToggle(forecastKey)}
-          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-900/10 py-2 text-xs font-medium text-emerald-900/60 hover:bg-emerald-50"
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-900/15 py-2 text-sm font-medium text-emerald-900/80 hover:bg-emerald-50"
         >
           {expanded ? (
             <>
@@ -504,17 +519,17 @@ function ComparisonTable({ rows, periodLabel, target }) {
   return (
     <div className="mt-6 border-t border-emerald-900/10 pt-5">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-950">
+        <h3 className="text-base font-semibold uppercase tracking-[0.14em] text-emerald-950">
           Actual vs predicted
         </h3>
-        <span className="text-xs text-emerald-900/50">
+        <span className="text-sm text-emerald-900/75">
           {periodLabel === 'Quarter' ? 'Completed quarters only' : 'Completed months only'}
         </span>
       </div>
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[620px] border-collapse text-sm">
+        <table className="w-full min-w-[620px] border-collapse text-base">
           <thead>
-            <tr className="border-b border-emerald-900/10 text-left text-xs uppercase tracking-[0.16em] text-lime-700/60">
+            <tr className="border-b border-emerald-900/15 text-left text-sm uppercase tracking-[0.12em] text-emerald-900/80">
               <th className="py-2 pr-4">{periodLabel}</th>
               <th className="px-3 py-2 text-right">Actual</th>
               <th className="px-3 py-2 text-right">Predicted</th>
@@ -527,9 +542,9 @@ function ComparisonTable({ rows, periodLabel, target }) {
                 <td className="py-2 pr-4 font-medium text-emerald-950">
                   {row.label}
                 </td>
-                <td className="px-3 py-2 text-right text-emerald-900/75">{fmt(row.actual)}</td>
-                <td className="px-3 py-2 text-right text-emerald-900/75">{fmt(row.predicted)}</td>
-                <td className="px-3 py-2 text-right text-emerald-900/75">
+                <td className="px-3 py-2 text-right text-emerald-900/90">{fmt(row.actual)}</td>
+                <td className="px-3 py-2 text-right text-emerald-900/90">{fmt(row.predicted)}</td>
+                <td className="px-3 py-2 text-right text-emerald-900/90">
                   {row.accuracy == null ? '—' : `${row.accuracy.toFixed(1)}%`}
                 </td>
               </tr>
@@ -582,15 +597,15 @@ function CategoryContributionTable({ columns, target, periodWord }) {
   return (
     <div className="mt-6 border-t border-emerald-900/10 pt-5">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-950">
+        <h3 className="text-base font-semibold uppercase tracking-[0.14em] text-emerald-950">
           Category contribution estimate
         </h3>
-        <span className="text-xs text-emerald-900/50">Last 6 months average share</span>
+        <span className="text-sm text-emerald-900/75">Last 6 months average share</span>
       </div>
       <div className="mt-3 overflow-x-auto">
-        <table className="w-full min-w-[620px] border-collapse text-sm">
+        <table className="w-full min-w-[620px] border-collapse text-base">
           <thead>
-            <tr className="border-b border-emerald-900/10 text-left text-xs uppercase tracking-[0.16em] text-lime-700/60">
+            <tr className="border-b border-emerald-900/15 text-left text-sm uppercase tracking-[0.12em] text-emerald-900/80">
               <th className="py-2 pr-4">Category</th>
               {columns.map((column) => (
                 <th key={column.key} className="px-3 py-2 text-right">
@@ -607,14 +622,14 @@ function CategoryContributionTable({ columns, target, periodWord }) {
                   const item = column.categories.find((entry) => entry.category === category);
                   const previousAmount = index > 0 ? findAmount(columns[index - 1], category) : null;
                   return (
-                    <td key={`${category}-${column.key}`} className="px-3 py-2 text-right text-emerald-900/75">
+                    <td key={`${category}-${column.key}`} className="px-3 py-2 text-right text-emerald-900/90">
                       {item ? (
                         <>
                           <span className="flex items-center justify-end gap-1 font-medium">
                             <ChangeArrow current={item.amount} previous={previousAmount} target={target} periodWord={periodWord} />
                             {formatValue(item.amount, target)}
                           </span>
-                          <span className="text-xs text-emerald-900/50">{item.percentage.toFixed(1)}%</span>
+                          <span className="text-sm text-emerald-900/75">{item.percentage.toFixed(1)}%</span>
                         </>
                       ) : '—'}
                     </td>
@@ -633,7 +648,7 @@ function CategoryContributionTable({ columns, target, periodWord }) {
                       <ChangeArrow current={total} previous={previousTotal} target={target} periodWord={periodWord} />
                       {formatValue(total, target)}
                     </span>
-                    <span className="text-xs text-emerald-900/60">100.0%</span>
+                    <span className="text-sm text-emerald-900/80">100.0%</span>
                   </td>
                 );
               })}
@@ -654,16 +669,16 @@ function ForecastBody({ forecastKey, loading, error, view, target, granularity, 
     <>
       <div className={`${chartHeight} rounded-3xl border border-emerald-900/10 bg-[#fbfaf7] p-3 sm:p-4`}>
         {loading ? (
-          <div className="flex h-full items-center justify-center gap-2 text-emerald-900/50">
+          <div className="flex h-full items-center justify-center gap-2 text-base text-emerald-900/75">
             <Loader2 className="h-4 w-4 animate-spin" /> {loadingText}
           </div>
         ) : error ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-emerald-900/60">
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-base text-emerald-900/80">
             <AlertCircle className="h-5 w-5" />
-            <p className="max-w-xs text-sm">{error}</p>
+            <p className="max-w-xs text-base">{error}</p>
           </div>
         ) : view.chartData.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-emerald-900/50">
+          <div className="flex h-full items-center justify-center text-base text-emerald-900/75">
             No forecast data available.
           </div>
         ) : (
@@ -774,16 +789,16 @@ export default function Forecasts() {
   );
 
   const refreshButtonClass =
-    'flex h-9 w-9 items-center justify-center rounded-full border border-emerald-900/10 text-emerald-900/60 hover:bg-emerald-50';
+    'flex h-10 w-10 items-center justify-center rounded-full border border-emerald-900/15 text-emerald-900/80 hover:bg-emerald-50';
 
   return (
     <section className="grid gap-6">
       {/* Header + filters */}
       <div className="rounded-[1.5rem] border border-emerald-900/10 bg-[#fbfaf7] p-6 sm:p-8">
         <div className="max-w-2xl">
-          <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">Forecasts</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-tight text-emerald-950 sm:text-4xl">
-           FORECASTS
+          <p className="section-label">Forecasts</p>
+          <h1 className="page-title mt-3">
+            Forecasts
           </h1>
         </div>
 
@@ -805,7 +820,7 @@ export default function Forecasts() {
               <BrainCircuit className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-2xl font-semibold tracking-tight text-emerald-950">
+              <h2 className="section-heading">
                 Forecasted Gross sales
               </h2>
             </div>
@@ -839,7 +854,7 @@ export default function Forecasts() {
               <BrainCircuit className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-2xl font-semibold tracking-tight text-emerald-950">
+              <h2 className="section-heading">
                 Forecasted Units Sold
               </h2>
             </div>
@@ -852,7 +867,7 @@ export default function Forecasts() {
         <p className="mt-4 text-2xl font-semibold text-emerald-950">
           {pretrainedLoading.demand ? '—' : formatValue(demandView.projectedTotal, demandTarget)}
         </p>
-        <p className="mt-1 text-sm text-emerald-900/65">
+        <p className="mt-1 text-base text-emerald-900/75">
           {demandView.rangeLabel ? `Projected total, ${demandView.rangeLabel}` : 'Projected total'}
         </p>
 

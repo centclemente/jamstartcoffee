@@ -26,8 +26,8 @@ export default function ConfirmModal({
       <div className="w-full max-w-lg rounded-[1.75rem] border border-emerald-900/10 bg-[#fbfaf7] p-5 shadow-2xl shadow-emerald-950/25 sm:p-6">
         <div className="flex items-start justify-between gap-4 border-b border-emerald-900/10 pb-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">Please confirm</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-emerald-950">{title}</h2>
+            <p className="section-label">Please confirm</p>
+            <h2 className="section-heading mt-2">{title}</h2>
           </div>
 
           <button

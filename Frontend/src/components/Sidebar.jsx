@@ -53,7 +53,7 @@ export default function Sidebar() {
             <img src={logo} alt="Jamstart Coffee" className="h-10 w-10 shrink-0 rounded-xl object-contain" />
             {open && (
               <div>
-                <p className="text-[0.65rem] uppercase tracking-[0.35em] text-lime-700/65">Jamstart Coffee</p>
+                <p className="section-label">Jamstart Coffee</p>
               </div>
             )}
           </div>

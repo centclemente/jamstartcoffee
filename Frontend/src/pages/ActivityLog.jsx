@@ -117,21 +117,21 @@ export default function ActivityLog() {
             <Activity className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="text-3xl font-semibold tracking-tight text-emerald-950">Activity log</h2>
+            <h2 className="page-title">Activity log</h2>
           </div>
         </div>
 
         <div className="grid gap-4 px-6 py-5 sm:grid-cols-3">
           <div className="rounded-2xl border border-emerald-900/10 bg-white p-4 shadow-sm shadow-emerald-950/5">
-            <p className="text-xs uppercase tracking-[0.3em] text-lime-700/70">Total events</p>
+            <p className="content-heading">Total events</p>
             <p className="mt-2 text-2xl font-semibold text-emerald-950">{totalLogs}</p>
           </div>
           <div className="rounded-2xl border border-emerald-900/10 bg-white p-4 shadow-sm shadow-emerald-950/5">
-            <p className="text-xs uppercase tracking-[0.3em] text-lime-700/70">Showing</p>
+            <p className="content-heading">Showing</p>
             <p className="mt-2 text-2xl font-semibold text-emerald-950">{logs.length}</p>
           </div>
           <div className="rounded-2xl border border-emerald-900/10 bg-white p-4 shadow-sm shadow-emerald-950/5">
-            <p className="text-xs uppercase tracking-[0.3em] text-lime-700/70">Current page</p>
+            <p className="content-heading">Current page</p>
             <p className="mt-2 text-2xl font-semibold text-emerald-950">
               {page} of {totalPages}
             </p>

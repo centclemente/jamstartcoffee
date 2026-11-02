@@ -200,7 +200,7 @@ function SectionCard({ title, children, className = '' }) {
   return (
     <section className={`rounded-[1.5rem] border border-emerald-900/10 bg-[#fbfaf7] p-5 shadow-sm shadow-emerald-950/5 sm:p-6 ${className}`}>
       <div className="border-b border-emerald-900/10 pb-4">
-        <p className="text-sm font-semibold uppercase tracking-[0.25em] text-lime-700/80">{title}</p>
+        <p className="content-heading">{title}</p>
       </div>
       <div className="pt-5">{children}</div>
     </section>
@@ -244,7 +244,7 @@ function KpiStatCard({ icon, label, value, sublabel, loading, error }) {
           {icon}
         </div>
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">{label}</p>
+          <p className="content-heading">{label}</p>
           {error ? (
             <p className="mt-1 text-sm text-rose-600">{error}</p>
           ) : loading ? (
@@ -503,7 +503,7 @@ export default function Dashboard() {
 
         <div className="relative flex flex-col gap-6">
           <div>
-            <h1 className="text-3xl font-semibold uppercase tracking-[0.2em] text-emerald-950 sm:text-4xl">Analytics dashboard</h1>
+            <h1 className="page-title">Analytics dashboard</h1>
           </div>
 
           {/* General filters: apply to every card and chart on this page */}

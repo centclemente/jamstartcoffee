@@ -21,7 +21,7 @@ export default function Table({
       {(title || onSearchChange || (onFilterChange && filterOptions.length > 0) || actions) && (
         <div className="flex flex-col gap-4 border-b border-emerald-900/10 pb-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            {title && <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">{title}</p>}
+            {title && <p className="content-heading">{title}</p>}
           </div>
 
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-end">

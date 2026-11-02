@@ -953,7 +953,7 @@ export default function Reports() {
         <div className="mb-6 flex items-center gap-3">
           <FileText className="h-5 w-5 text-emerald-700" />
           <div>
-            <h1 className="text-xl font-semibold text-emerald-950">Choose a report</h1>
+            <h1 className="page-title text-2xl">Choose a report</h1>
           </div>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
@@ -987,10 +987,10 @@ export default function Reports() {
           <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[1.5rem] border border-emerald-200/40 bg-[#fbfaf7] shadow-2xl">
             <div className="flex items-start justify-between border-b border-emerald-900/10 px-5 py-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">
+                <p className="section-label">
                   Jamstart report template
                 </p>
-                <h2 className="mt-1 text-2xl font-semibold text-emerald-950">
+                <h2 className="section-heading mt-1">
                   {activeReport.title}
                 </h2>
                 <p className="mt-1 text-sm text-emerald-900/60">

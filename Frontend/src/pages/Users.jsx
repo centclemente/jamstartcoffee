@@ -486,8 +486,8 @@ export default function Users() {
       <div className="rounded-[1.5rem] border border-emerald-900/10 bg-[#fbfaf7] p-6 sm:p-8">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">Users</p>
-            <h1 className="mt-3 text-3xl font-semibold tracking-tight text-emerald-950 sm:text-4xl">User management</h1>
+            <p className="section-label">Users</p>
+            <h1 className="page-title mt-3">User management</h1>
           </div>
 
           <div className="flex flex-col items-end gap-3">
@@ -530,7 +530,7 @@ export default function Users() {
       <section className="rounded-[1.5rem] border border-emerald-900/10 bg-[#fbfaf7] p-5 shadow-sm shadow-emerald-950/5 sm:p-6">
         <div className="flex flex-col gap-2 border-b border-emerald-900/10 pb-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">Password requests</p>
+            <p className="section-label">Password requests</p>
           </div>
           <span className="text-xs uppercase tracking-[0.2em] text-emerald-900/50">{passwordRequests.length} pending</span>
         </div>
@@ -635,7 +635,7 @@ export default function Users() {
           <div className="w-full max-w-md rounded-[1.75rem] border border-emerald-900/10 bg-[#fbfaf7] p-5 shadow-2xl shadow-emerald-950/25 sm:p-6">
             <div className="flex items-start justify-between gap-4 border-b border-emerald-900/10 pb-4">
               <div>
-                <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">Password request</p>
+                <p className="section-label">Password request</p>
                 <h2 className="mt-2 text-2xl font-semibold tracking-tight text-emerald-950">Set a new password</h2>
                 <p className="mt-2 text-sm text-emerald-900/60">{selectedPasswordRequest.email}</p>
               </div>
@@ -697,7 +697,7 @@ export default function Users() {
           <div className="w-full max-w-2xl rounded-[1.75rem] border border-emerald-900/10 bg-[#fbfaf7] p-5 shadow-2xl shadow-emerald-950/25 sm:p-6">
             <div className="flex items-start justify-between gap-4 border-b border-emerald-900/10 pb-4">
               <div>
-                <p className="text-xs uppercase tracking-[0.35em] text-lime-700/70">
+                <p className="section-label">
                   {mode === 'create' ? 'Create user' : 'Edit user'}
                 </p>
                 <h2 className="mt-2 text-2xl font-semibold tracking-tight text-emerald-950">
